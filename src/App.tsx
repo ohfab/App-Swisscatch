@@ -8,9 +8,10 @@ import { PlaceSheet } from './components/PlaceSheet';
 import { CantonSheet } from './components/CantonSheet';
 import { PinsSheet } from './components/PinsSheet';
 import { GameSheet } from './components/GameSheet';
+import { RouteSheet, emptyPlan, ME, type RoutePlan } from './components/RouteSheet';
 import { Toast } from './components/Toast';
-import { CloseIcon, LayersIcon, LocateFilledIcon, LocateIcon } from './components/Icons';
-import { BASEMAPS, type BasemapId, type OverlayId } from './lib/config';
+import { CloseIcon, LayersIcon, LocateFilledIcon, LocateIcon, TrainIcon } from './components/Icons';
+import { BASEMAPS, DEFAULT_BASEMAP, type BasemapId, type OverlayId } from './lib/config';
 import { loadCantons, type CantonFeature } from './lib/cantons';
 import type { LatLng } from './lib/geo';
 import type { SearchResult } from './lib/geoadmin';
@@ -25,6 +26,7 @@ type Panel =
   | { type: 'layers' }
   | { type: 'place'; place: Place }
   | { type: 'canton'; canton: CantonFeature }
+  | { type: 'route' }
   | { type: 'pins' }
   | { type: 'game' };
 
@@ -62,7 +64,7 @@ function visibleArea() {
 
 export function App() {
   const mapRef = useRef<L.Map | null>(null);
-  const [basemap, setBasemap] = usePersistentState<BasemapId>('basemap', 'farbe');
+  const [basemap, setBasemap] = usePersistentState<BasemapId>('basemap.v2', DEFAULT_BASEMAP);
   const [storedOverlays, setOverlays] = usePersistentState<Partial<Record<OverlayId, boolean>>>('overlays', DEFAULT_OVERLAYS);
   const overlays = useMemo(() => ({ ...DEFAULT_OVERLAYS, ...storedOverlays }), [storedOverlays]);
   const [hintSeen, setHintSeen] = usePersistentState('hint.longpress', false);
@@ -71,11 +73,15 @@ export function App() {
   const [stations, setStations] = useState<Station[]>([]);
   const [openStationId, setOpenStationId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [plan, setPlan] = useState<RoutePlan>(emptyPlan);
   const { pins, addPin, updatePin, removePin } = usePins();
   const geo = useGeolocation();
   const online = useOnline();
 
-  const validBasemap = BASEMAPS.some((b) => b.id === basemap) ? basemap : 'farbe';
+  const validBasemap = BASEMAPS.some((b) => b.id === basemap) ? basemap : DEFAULT_BASEMAP;
+  const shownRoute = plan.result?.connections.find((c) => c.id === plan.selectedId) ?? null;
+  const updatePlan = useCallback((u: (p: RoutePlan) => RoutePlan) => setPlan(u), []);
+  const startGps = useCallback(() => geo.start(), [geo.start]);
 
   useEffect(() => {
     if (geo.status === 'denied') {
@@ -104,12 +110,16 @@ export function App() {
   }, []);
 
   /** Fläche in den sichtbaren Bereich einpassen (ganzzahliger Zoom = scharfe Kacheln) */
-  const fit = useCallback((bounds: L.LatLngBoundsExpression, maxZoom = 16) => {
+  const fit = useCallback((bounds: L.LatLngBoundsExpression, maxZoomOrAuto: number | boolean = 16) => {
+    // true = automatisches Einpassen, nur wenn über dem Sheet genug Karte sichtbar ist
+    const auto = maxZoomOrAuto === true;
+    const maxZoom = typeof maxZoomOrAuto === 'number' ? maxZoomOrAuto : 16;
     setFollow(false);
     afterPaint(() => {
       const map = mapRef.current;
       if (!map) return;
       const a = visibleArea();
+      if (auto && a.bottom - a.top < 200) return;
       const size = map.getSize();
       const b = L.latLngBounds(bounds as L.LatLngBoundsLiteral);
       const padding = L.point(a.left + size.x - a.right, a.top + size.y - a.bottom);
@@ -201,7 +211,8 @@ export function App() {
     }
   };
 
-  const activeTab: Tab = panel?.type === 'pins' ? 'pins' : panel?.type === 'game' ? 'game' : 'map';
+  const activeTab: Tab =
+    panel?.type === 'pins' || panel?.type === 'game' || panel?.type === 'route' ? panel.type : 'map';
   const currentPlace = panel?.type === 'place' ? panel.place : null;
   const currentPin = currentPlace?.pinId ? (pins.find((p) => p.id === currentPlace.pinId) ?? null) : null;
   const selection = currentPlace && !currentPin ? { lat: currentPlace.lat, lng: currentPlace.lng } : null;
@@ -223,6 +234,11 @@ export function App() {
         selection={selection}
         selectedCantonId={panel?.type === 'canton' ? panel.canton.properties.id : null}
         stations={stations}
+        route={shownRoute}
+        onBasemapError={() => {
+          setToast('Strassenkarte nicht verfügbar – zeige Landeskarte');
+          setBasemap('farbe');
+        }}
         onReady={(map) => (mapRef.current = map)}
         onTap={handleTap}
         onLongPress={handleLongPress}
@@ -234,7 +250,28 @@ export function App() {
       <header className="topbar">
         <SearchBar onSelect={handleSearch} onFocus={() => panel?.type !== 'place' && closePanel()} />
         {!online && <div className="banner">Offline – bereits geladene Karten bleiben sichtbar</div>}
-        {!hintSeen && !panel && (
+        {shownRoute && panel?.type !== 'route' && (
+          <div className="route-chip">
+            <button className="route-chip-main" onClick={() => setPanel({ type: 'route' })}>
+              <TrainIcon size={18} />
+              <span>
+                {shownRoute.departure} – {shownRoute.arrival} ·{' '}
+                {shownRoute.legs
+                  .filter((l) => l.kind !== 'walk')
+                  .map((l) => l.line)
+                  .join(', ')}
+              </span>
+            </button>
+            <button
+              className="icon-btn subtle"
+              aria-label="Route ausblenden"
+              onClick={() => setPlan((p) => ({ ...p, selectedId: null }))}
+            >
+              <CloseIcon size={16} />
+            </button>
+          </div>
+        )}
+        {!hintSeen && !panel && !shownRoute && (
           <div className="hint">
             <span>
               <strong>Tipp:</strong> {finePointer ? 'Rechtsklick auf die Karte' : 'Lange auf die Karte drücken'} zeigt
@@ -301,6 +338,17 @@ export function App() {
             closePanel();
           }}
           onShowCanton={(canton) => setPanel({ type: 'canton', canton })}
+          onRoute={(title) => {
+            setPlan((p) => ({
+              ...p,
+              from: ME,
+              to: { kind: 'point', label: title, lat: panel.place.lat, lng: panel.place.lng },
+              result: null,
+              selectedId: null,
+            }));
+            setPanel({ type: 'route' });
+            setStations([]);
+          }}
           onToast={setToast}
           onClose={closePanel}
         />
@@ -317,6 +365,17 @@ export function App() {
               fit(L.geoJSON(next).getBounds(), 12);
             })
           }
+          onClose={closePanel}
+        />
+      )}
+      {panel?.type === 'route' && (
+        <RouteSheet
+          plan={plan}
+          onPlan={updatePlan}
+          position={geo.position}
+          geoStatus={geo.status}
+          onStartGps={startGps}
+          onFit={fit}
           onClose={closePanel}
         />
       )}

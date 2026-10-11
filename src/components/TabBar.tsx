@@ -1,6 +1,6 @@
-import { FlagIcon, MapIcon, PinIcon } from './Icons';
+import { FlagIcon, MapIcon, PinIcon, TrainIcon } from './Icons';
 
-export type Tab = 'map' | 'pins' | 'game';
+export type Tab = 'map' | 'route' | 'pins' | 'game';
 
 interface Props {
   active: Tab;
@@ -10,6 +10,7 @@ interface Props {
 
 const TABS: { id: Tab; label: string; Icon: typeof MapIcon }[] = [
   { id: 'map', label: 'Karte', Icon: MapIcon },
+  { id: 'route', label: 'Fahrplan', Icon: TrainIcon },
   { id: 'pins', label: 'Orte', Icon: PinIcon },
   { id: 'game', label: 'Spiel', Icon: FlagIcon },
 ];

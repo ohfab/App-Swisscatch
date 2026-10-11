@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
-import { lineKind, stationboard, type Departure, type Station } from '../lib/transport';
+import { stationboard, type Departure, type Station } from '../lib/transport';
 import { formatDistance } from '../lib/geo';
 import { ChevronIcon } from './Icons';
+import { LineBadge } from './LineBadge';
 import { stationEmoji } from './stationIcons';
-
-// Fahrplanzeiten immer in Schweizer Zeit, egal wo das Handy eingestellt ist
-const timeFmt = new Intl.DateTimeFormat('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' });
 
 function Board({ station }: { station: Station }) {
   const [deps, setDeps] = useState<Departure[] | null>(null);
@@ -26,24 +24,25 @@ function Board({ station }: { station: Station }) {
   if (deps.length === 0) return <p className="muted small">Keine Abfahrten in nächster Zeit.</p>;
   return (
     <ul className="departures">
-      {deps.map((d, i) => {
-        const kind = lineKind(d.category);
-        return (
-          <li key={i}>
-            <time>
-              {timeFmt.format(d.time)}
-              {d.delayMin > 0 && <span className="delay">+{d.delayMin}</span>}
-            </time>
-            <span className={`line line-${kind}`}>{d.line}</span>
-            <span className="dest">{d.to}</span>
-            {d.platform && (
-              <span className="platform">
-                {kind === 'train' || kind === 'sbahn' ? 'Gl.' : 'Kante'} {d.platform}
-              </span>
+      {deps.map((d, i) => (
+        <li key={i} className={d.cancelled ? 'cancelled' : ''}>
+          <time>
+            {d.time}
+            {d.cancelled ? (
+              <span className="delay">fällt aus</span>
+            ) : (
+              d.delayMin !== null && d.delayMin > 0 && <span className="delay">+{d.delayMin}</span>
             )}
-          </li>
-        );
-      })}
+          </time>
+          <LineBadge line={d.line} kind={d.kind} color={d.color} />
+          <span className="dest">{d.to}</span>
+          {d.platform && (
+            <span className="platform">
+              {d.kind === 'train' || d.kind === 'sbahn' ? 'Gl.' : 'Kante'} {d.platform}
+            </span>
+          )}
+        </li>
+      ))}
     </ul>
   );
 }

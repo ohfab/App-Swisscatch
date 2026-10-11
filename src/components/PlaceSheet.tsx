@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { BottomSheet } from './BottomSheet';
-import { CopyIcon, MountainIcon, PinIcon, RulerIcon, ShareIcon, TrainIcon, TrashIcon, FlagIcon } from './Icons';
+import { ClockIcon, CopyIcon, MountainIcon, PinIcon, RulerIcon, ShareIcon, TrainIcon, TrashIcon, FlagIcon } from './Icons';
 import { StationList } from './Departures';
 import { findCanton, type CantonFeature } from '../lib/cantons';
 import { fetchHeight } from '../lib/geoadmin';
 import { distanceMeters, formatDistance, formatLv95, formatNumber, formatWgs84 } from '../lib/geo';
-import { nearbyStations, type Station } from '../lib/transport';
+import { nearbyStations, TIMETABLE_CREDIT, type Station } from '../lib/transport';
 import { shareLink, type Place } from '../lib/place';
 import { PIN_COLORS, type Pin } from '../hooks/usePins';
 import type { Position } from '../hooks/useGeolocation';
@@ -22,6 +22,7 @@ interface Props {
   onUpdatePin: (id: string, patch: Partial<Pin>) => void;
   onRemovePin: (id: string) => void;
   onShowCanton: (canton: CantonFeature) => void;
+  onRoute: (title: string) => void;
   onToast: (msg: string) => void;
   onClose: () => void;
 }
@@ -147,9 +148,15 @@ export function PlaceSheet(props: Props) {
           <ShareIcon size={20} />
           Teilen
         </button>
+        {place.source !== 'me' && (
+          <button className="action" onClick={() => props.onRoute(title)}>
+            <TrainIcon size={20} />
+            Route hierher
+          </button>
+        )}
         <button className="action" onClick={loadStations} disabled={stationState === 'loading'}>
-          <TrainIcon size={20} />
-          ÖV in der Nähe
+          <ClockIcon size={20} />
+          Abfahrten
         </button>
       </div>
 
@@ -231,7 +238,7 @@ export function PlaceSheet(props: Props) {
           {stationState === 'loading' && <p className="muted small">Suche Haltestellen …</p>}
           {stationState === 'error' && <p className="muted small">Fahrplan nicht erreichbar – bist du online?</p>}
           <StationList stations={props.stations} openId={props.openStationId} onToggle={props.onToggleStation} />
-          <p className="fine-print">Fahrplandaten: transport.opendata.ch</p>
+          <p className="fine-print">{TIMETABLE_CREDIT}</p>
         </>
       )}
     </BottomSheet>

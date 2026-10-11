@@ -3,7 +3,7 @@ import type { LatLngBoundsExpression, LatLngTuple } from 'leaflet';
 const WMTS = 'https://wmts.geo.admin.ch/1.0.0';
 const SWISSTOPO_ATTR = '<a href="https://www.swisstopo.admin.ch/" target="_blank" rel="noopener">© swisstopo</a>';
 
-export type BasemapId = 'farbe' | 'grau' | 'luftbild' | 'winter';
+export type BasemapId = 'strassen' | 'luftbild' | 'farbe' | 'winter';
 export type OverlayId = 'cantons' | 'transit' | 'hiking';
 
 export interface TileDef {
@@ -12,16 +12,51 @@ export interface TileDef {
   maxNativeZoom: number;
 }
 
-export interface BasemapDef extends TileDef {
+const VECTOR_STYLES = 'https://vectortiles.geo.admin.ch/styles';
+
+interface BasemapBase {
   id: BasemapId;
   label: string;
   /** Farbe der Vorschau-Kachel im Ebenen-Menü */
   swatch: string;
 }
 
+/** Vektorkarte (MapLibre): scharf in jeder Zoomstufe, mit Strassen, Gebäuden, ÖV und POIs */
+export interface VectorBasemap extends BasemapBase {
+  kind: 'vector';
+  style: string;
+  attribution: string;
+}
+
+/** Klassische Rasterkacheln */
+export interface RasterBasemap extends BasemapBase, TileDef {
+  kind: 'raster';
+}
+
+export type BasemapDef = VectorBasemap | RasterBasemap;
+
+export const DEFAULT_BASEMAP: BasemapId = 'strassen';
+
 export const BASEMAPS: BasemapDef[] = [
   {
+    id: 'strassen',
+    kind: 'vector',
+    label: 'Strassen',
+    style: `${VECTOR_STYLES}/ch.swisstopo.basemap.vt/style.json`,
+    attribution: SWISSTOPO_ATTR,
+    swatch: 'linear-gradient(135deg,#f4f2ee 0%,#f4f2ee 38%,#ffd36b 40%,#ffd36b 47%,#f4f2ee 49%,#cfe6c3 75%,#a9d3f0 100%)',
+  },
+  {
+    id: 'luftbild',
+    kind: 'vector',
+    label: 'Luftbild',
+    style: `${VECTOR_STYLES}/ch.swisstopo.imagerybasemap.vt/style.json`,
+    attribution: SWISSTOPO_ATTR,
+    swatch: 'linear-gradient(135deg,#5b6b3c 0%,#3f5130 45%,#f2f2f2 47%,#f2f2f2 50%,#3f5130 52%,#8a8f7a 100%)',
+  },
+  {
     id: 'farbe',
+    kind: 'raster',
     label: 'Landeskarte',
     url: `${WMTS}/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg`,
     attribution: SWISSTOPO_ATTR,
@@ -29,23 +64,8 @@ export const BASEMAPS: BasemapDef[] = [
     swatch: 'linear-gradient(135deg,#e9e4d4 0%,#c9dcb3 45%,#a9cbe6 100%)',
   },
   {
-    id: 'grau',
-    label: 'Grau',
-    url: `${WMTS}/ch.swisstopo.pixelkarte-grau/default/current/3857/{z}/{x}/{y}.jpeg`,
-    attribution: SWISSTOPO_ATTR,
-    maxNativeZoom: 19,
-    swatch: 'linear-gradient(135deg,#f2f2f2 0%,#c4c4c4 60%,#9a9a9a 100%)',
-  },
-  {
-    id: 'luftbild',
-    label: 'Luftbild',
-    url: `${WMTS}/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg`,
-    attribution: SWISSTOPO_ATTR,
-    maxNativeZoom: 20,
-    swatch: 'linear-gradient(135deg,#5b6b3c 0%,#3f5130 50%,#8a8f7a 100%)',
-  },
-  {
     id: 'winter',
+    kind: 'raster',
     label: 'Winter',
     url: `${WMTS}/ch.swisstopo.pixelkarte-farbe-winter/default/current/3857/{z}/{x}/{y}.jpeg`,
     attribution: SWISSTOPO_ATTR,

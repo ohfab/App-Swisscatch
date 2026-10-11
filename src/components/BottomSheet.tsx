@@ -4,17 +4,30 @@ import { CloseIcon } from './Icons';
 interface Props {
   title: ReactNode;
   subtitle?: ReactNode;
+  /** Untertitel, wenn das Sheet zur schmalen Leiste verkleinert ist */
+  peekSubtitle?: ReactNode;
   onClose: () => void;
   children: ReactNode;
   /** Zusätzliche Aktion rechts neben dem Titel */
   headerAction?: ReactNode;
   label: string;
+  /** Verkleinert (nur Titel sichtbar); ohne Angabe verwaltet das Sheet das selbst */
+  peek?: boolean;
+  onPeekChange?: (peek: boolean) => void;
 }
 
-/** Bottom-Sheet im App-Stil – nach unten wischen oder ✕ schliesst es */
-export function BottomSheet({ title, subtitle, onClose, children, headerAction, label }: Props) {
+/**
+ * Bottom-Sheet im App-Stil. Nach unten wischen verkleinert es zur Leiste,
+ * nochmals wischen oder ✕ schliesst es. Tippen auf die Leiste klappt es wieder auf.
+ */
+export function BottomSheet(props: Props) {
+  const { title, subtitle, peekSubtitle, onClose, children, headerAction, label } = props;
+  const [innerPeek, setInnerPeek] = useState(false);
+  const peek = props.peek ?? innerPeek;
+  const setPeek = props.onPeekChange ?? setInnerPeek;
   const [dragY, setDragY] = useState(0);
   const start = useRef<number | null>(null);
+  const moved = useRef(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -24,28 +37,38 @@ export function BottomSheet({ title, subtitle, onClose, children, headerAction, 
 
   const onPointerDown = (e: React.PointerEvent) => {
     start.current = e.clientY;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    moved.current = false;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (start.current === null) return;
-    setDragY(Math.max(0, e.clientY - start.current));
+    const dy = e.clientY - start.current;
+    if (Math.abs(dy) > 6) moved.current = true;
+    setDragY(peek ? Math.min(0, dy) : Math.max(0, dy));
   };
   const onPointerUp = () => {
     if (start.current === null) return;
     start.current = null;
-    if (dragY > 90) onClose();
+    if (!moved.current) {
+      // einfacher Tipp auf den Griff: auf- bzw. zuklappen
+      setPeek(!peek);
+    } else if (!peek && dragY > 220) onClose();
+    else if (!peek && dragY > 60) setPeek(true);
+    else if (peek && dragY < -40) setPeek(false);
     setDragY(0);
   };
 
   return (
     <section
-      className="sheet"
+      className={`sheet ${peek ? 'peek' : ''}`}
       role="dialog"
       aria-label={label}
       style={dragY ? { transform: `translateY(${dragY}px)`, transition: 'none' } : undefined}
     >
       <div
         className="sheet-grip"
+        role="button"
+        aria-label={peek ? 'Aufklappen' : 'Verkleinern'}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -53,17 +76,26 @@ export function BottomSheet({ title, subtitle, onClose, children, headerAction, 
       >
         <span />
       </div>
-      <header className="sheet-header">
+      <header className="sheet-header" onClick={peek ? () => setPeek(false) : undefined}>
         <div className="sheet-titles">
           <h2>{title}</h2>
-          {subtitle && <p>{subtitle}</p>}
+          {(peek && peekSubtitle ? peekSubtitle : subtitle) && <p>{peek && peekSubtitle ? peekSubtitle : subtitle}</p>}
         </div>
         {headerAction}
-        <button className="icon-btn subtle" onClick={onClose} aria-label="Schliessen">
+        <button
+          className="icon-btn subtle"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          aria-label="Schliessen"
+        >
           <CloseIcon size={20} />
         </button>
       </header>
-      <div className="sheet-body">{children}</div>
+      <div className="sheet-body" hidden={peek}>
+        {children}
+      </div>
     </section>
   );
 }

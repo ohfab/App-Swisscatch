@@ -135,3 +135,15 @@ export const EyeIcon = make(
     <circle cx="12" cy="12" r="3" />
   </>,
 );
+export const SwapIcon = make(
+  <>
+    <path d="M7 4v16M7 4 3.5 7.5M7 4l3.5 3.5" />
+    <path d="M17 20V4M17 20l-3.5-3.5M17 20l3.5-3.5" />
+  </>,
+);
+export const WalkIcon = make(
+  <>
+    <circle cx="13" cy="4.5" r="1.8" />
+    <path d="m9.5 21 2.5-6 2.5 2.5V21M8 12l2.5-4.5 3.5 1 2 3.5 2.5 1M12 15l-1.5-6" />
+  </>,
+);

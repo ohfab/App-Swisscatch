@@ -7,6 +7,8 @@ const base = process.env.BASE_PATH ?? '/';
 
 export default defineConfig({
   base,
+  // MapLibre (Strassenkarte) ist gross, wird aber erst bei Bedarf nachgeladen
+  build: { chunkSizeWarningLimit: 1100 },
   plugins: [
     react(),
     VitePWA({
@@ -30,9 +32,25 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,geojson}'],
+        globPatterns: ['**/*.{js,mjs,css,html,svg,png,geojson}'],
         navigateFallback: 'index.html',
         runtimeCaching: [
+          {
+            // Vektorkacheln, Schriften und Symbole der Strassenkarte
+            urlPattern: ({ url }) => /^vectortiles\d*\.geo\.admin\.ch$/.test(url.hostname) && !url.pathname.endsWith('style.json'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'swisstopo-vector',
+              expiration: { maxEntries: 4000, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Kartenstil: sofort aus dem Cache, im Hintergrund aktualisieren
+            urlPattern: ({ url }) => url.hostname === 'vectortiles.geo.admin.ch' && url.pathname.endsWith('style.json'),
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'swisstopo-styles', cacheableResponse: { statuses: [0, 200] } },
+          },
           {
             // Kartenkacheln von swisstopo: einmal geladen, offline verfügbar
             urlPattern: ({ url }) => url.hostname === 'wmts.geo.admin.ch',

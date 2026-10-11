@@ -18,7 +18,7 @@ import type { LatLng } from '../lib/geo';
 import { load, save } from '../lib/storage';
 import type { Pin } from '../hooks/usePins';
 import type { Position } from '../hooks/useGeolocation';
-import type { Station } from '../lib/transport';
+import { KIND_COLOR, type Connection, type Station } from '../lib/transport';
 import { stationEmoji } from './stationIcons';
 
 export interface MapViewProps {
@@ -30,6 +30,9 @@ export interface MapViewProps {
   selection: LatLng | null;
   selectedCantonId: number | null;
   stations: Station[];
+  /** Gewählte ÖV-Verbindung, die als Linie gezeichnet wird */
+  route: Connection | null;
+  onBasemapError?: () => void;
   onReady: (map: L.Map) => void;
   onTap: (p: LatLng, canton: CantonFeature | null) => void;
   onLongPress: (p: LatLng) => void;
@@ -59,6 +62,9 @@ function pinIcon(pin: Pin): L.DivIcon {
   });
 }
 
+/** Ebenen der swisstopo-Vektorkarte, die in der App stören */
+const HIDDEN_VECTOR_LAYERS = ['place_country'];
+
 /** Farbe der Fläche ausserhalb der Schweiz (auch Hintergrund der Karte) */
 const MASK_COLOR = '#4a515c';
 
@@ -73,11 +79,12 @@ function cantonStyle(f: CantonFeature | undefined, selectedId: number | null): L
   const color = CANTON_COLORS[(f?.properties.color ?? 0) % CANTON_COLORS.length];
   const selected = f?.properties.id === selectedId;
   return {
+    className: 'canton-shape',
     color: selected ? '#D52B1E' : '#5b4636',
-    weight: selected ? 3.5 : 1.2,
-    opacity: selected ? 1 : 0.7,
+    weight: selected ? 3.5 : 1.1,
+    opacity: selected ? 1 : 0.55,
     fillColor: color,
-    fillOpacity: selected ? 0.32 : 0.14,
+    fillOpacity: selected ? 0.22 : 0.08,
   };
 }
 
@@ -97,7 +104,8 @@ export function MapView(props: MapViewProps) {
   const propsRef = useRef(props);
   propsRef.current = props;
 
-  const baseLayerRef = useRef<L.TileLayer | null>(null);
+  const baseLayerRef = useRef<L.Layer | null>(null);
+  const routeLayerRef = useRef<L.LayerGroup | null>(null);
   const overlayLayersRef = useRef<Partial<Record<OverlayId, L.Layer>>>({});
   const cantonLayerRef = useRef<L.GeoJSON | null>(null);
   const cantonLabelsRef = useRef<L.LayerGroup | null>(null);
@@ -135,16 +143,18 @@ export function MapView(props: MapViewProps) {
     mask.style.pointerEvents = 'none';
     map.createPane('labels').style.zIndex = '450';
     map.getPane('labels')!.style.pointerEvents = 'none';
+    map.createPane('route').style.zIndex = '470';
+    map.getPane('route')!.style.pointerEvents = 'none';
 
     initialView(map);
 
     // Ausserhalb der Schweiz abdunkeln – weit herausgezoomt fast deckend,
     // damit fehlende Kacheln am Rand der swisstopo-Abdeckung nicht auffallen
     let maskLayer: L.Polygon | null = null;
-    const maskOpacity = (z: number) => (z < 8 ? 1 : z < 10 ? 0.55 : 0.3);
+    const maskOpacity = (z: number) => (z < 8 ? 1 : z < 10 ? 0.5 : 0.22);
     const updateZoomBand = () => {
       const z = map.getZoom();
-      el.dataset.zoomBand = z < 8 ? 'low' : z < 12 ? 'mid' : 'high';
+      el.dataset.zoomBand = z < 8 ? 'low' : z < 10 ? 'mid' : 'high';
       maskLayer?.setStyle({ fillOpacity: maskOpacity(z) });
     };
     updateZoomBand();
@@ -197,28 +207,67 @@ export function MapView(props: MapViewProps) {
       cantonLabelsRef.current = null;
       pinLayerRef.current = null;
       stationLayerRef.current = null;
+      routeLayerRef.current = null;
       positionRef.current = null;
       selectionRef.current = null;
       hadFixRef.current = false;
     };
   }, []);
 
-  // Grundkarte
+  // Grundkarte: Vektorkarte (MapLibre, wird erst bei Bedarf geladen) oder Rasterkacheln
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const def = BASEMAPS.find((b) => b.id === props.basemap) ?? BASEMAPS[0]!;
-    const layer = L.tileLayer(def.url, {
-      attribution: def.attribution,
-      maxNativeZoom: def.maxNativeZoom,
-      maxZoom: MAX_ZOOM,
-      zIndex: 1,
-      bounds: TILE_BOUNDS,
-      crossOrigin: true,
-      keepBuffer: 3,
-    }).addTo(map);
-    baseLayerRef.current?.remove();
-    baseLayerRef.current = layer;
+    let cancelled = false;
+    const swap = (layer: L.Layer) => {
+      if (cancelled || !mapRef.current) return;
+      layer.addTo(map);
+      baseLayerRef.current?.remove();
+      baseLayerRef.current = layer;
+    };
+    if (def.kind === 'raster') {
+      swap(
+        L.tileLayer(def.url, {
+          attribution: def.attribution,
+          maxNativeZoom: def.maxNativeZoom,
+          maxZoom: MAX_ZOOM,
+          zIndex: 1,
+          bounds: TILE_BOUNDS,
+          crossOrigin: true,
+          keepBuffer: 3,
+        }),
+      );
+    } else {
+      Promise.all([
+        import('maplibre-gl'),
+        // MapLibre findet seinen Hintergrund-Worker nach dem Bündeln nicht von selbst
+        import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
+        import('@maplibre/maplibre-gl-leaflet'),
+        import('maplibre-gl/dist/maplibre-gl.css'),
+      ])
+        .then(([maplibre, worker, plugin]) => {
+          if (cancelled) return;
+          maplibre.setWorkerUrl(worker.default);
+          const layer = plugin.maplibreGL({
+            style: def.style,
+            attribution: def.attribution,
+            attributionControl: false,
+            interactive: false,
+            maxZoom: MAX_ZOOM,
+          } as Parameters<typeof plugin.maplibreGL>[0] & { attribution: string });
+          swap(layer);
+          // Landesnamen ("SCHWEIZ/SUISSE/…") überdecken sonst die Kantonskürzel
+          const gl = layer.getMaplibreMap();
+          gl.once('load', () => {
+            for (const id of HIDDEN_VECTOR_LAYERS) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', 'none');
+          });
+        })
+        .catch(() => !cancelled && propsRef.current.onBasemapError?.());
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [props.basemap]);
 
   // Kachel-Overlays (ÖV, Wanderwege)
@@ -344,6 +393,50 @@ export function MapView(props: MapViewProps) {
         .addTo(group);
     }
   }, [props.stations]);
+
+  // Gewählte ÖV-Verbindung
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    routeLayerRef.current ??= L.layerGroup().addTo(map);
+    const group = routeLayerRef.current;
+    group.clearLayers();
+    const c = props.route;
+    if (!c) return;
+    const ll = (p: { lat: number | null; lng: number | null }) =>
+      p.lat !== null && p.lng !== null ? L.latLng(p.lat, p.lng) : null;
+    for (const leg of c.legs) {
+      const pts = [leg.from, ...leg.stops, leg.to].map(ll).filter((p): p is L.LatLng => p !== null);
+      if (pts.length < 2) continue;
+      if (leg.kind === 'walk') {
+        L.polyline(pts, { pane: 'route', color: '#4b5563', weight: 4, opacity: 0.9, dashArray: '2 8', lineCap: 'round' }).addTo(group);
+      } else {
+        const color = (leg.color ?? KIND_COLOR[leg.kind]).bg;
+        L.polyline(pts, { pane: 'route', color: '#ffffff', weight: 10, opacity: 0.95, lineJoin: 'round' }).addTo(group);
+        L.polyline(pts, { pane: 'route', color, weight: 6, opacity: 1, lineJoin: 'round' }).addTo(group);
+        for (const stop of leg.stops) {
+          const p = ll(stop);
+          if (p) L.circleMarker(p, { pane: 'route', radius: 3, color, weight: 2, fillColor: '#fff', fillOpacity: 1 }).addTo(group);
+        }
+      }
+    }
+    // Umstiege, Start und Ziel
+    c.legs.forEach((leg, i) => {
+      const p = ll(leg.from);
+      if (!p) return;
+      const start = i === 0;
+      L.circleMarker(p, {
+        pane: 'route',
+        radius: start ? 8 : 6,
+        color: start ? '#16a34a' : '#111827',
+        weight: 3,
+        fillColor: '#fff',
+        fillOpacity: 1,
+      }).addTo(group);
+    });
+    const end = ll(c.legs[c.legs.length - 1]!.to);
+    if (end) L.circleMarker(end, { pane: 'route', radius: 8, color: '#D52B1E', weight: 3, fillColor: '#D52B1E', fillOpacity: 1 }).addTo(group);
+  }, [props.route]);
 
   // Markierter Punkt
   useEffect(() => {
