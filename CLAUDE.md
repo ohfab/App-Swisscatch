@@ -21,3 +21,4 @@ Der Besitzer wünscht: Jede gewünschte Änderung sofort umsetzen und wieder ver
 - Die Strassenkarte ist eine MapLibre-Vektorkarte in Leaflet. MapLibre braucht `setWorkerUrl` mit der gebündelten Worker-Datei, sonst bleibt die Karte leer.
 - Fahrplandaten kommen von search.ch. Mit Koordinaten als Ziel sucht search.ch nur kurz voraus, darum gibt es in `RouteSheet.tsx` einen Rückfall auf die nächste Haltestelle.
 - Bei Browsertests mit der Vektorkarte nicht auf «networkidle» warten, und `.mjs` als JavaScript ausliefern.
+- Spiel: `src/game/` (Client, Regeln, Verschlüsselung). Öffentliche Broker sind aus der Cloud-Umgebung nicht erreichbar. Zum Testen `npm run broker` starten, den Browser ohne Proxy starten und die App mit `?broker=ws://127.0.0.1:1884` öffnen; mehrere Browser-Kontexte mit verschiedenen Standorten simulieren die Spieler.

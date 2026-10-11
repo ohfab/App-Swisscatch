@@ -9,8 +9,13 @@ import { CantonSheet } from './components/CantonSheet';
 import { PinsSheet } from './components/PinsSheet';
 import { GameSheet } from './components/GameSheet';
 import { RouteSheet, emptyPlan, ME, type RoutePlan } from './components/RouteSheet';
+import { TEAM_LABEL } from './components/GameSheet';
+import { useGame, takeInviteCode } from './game/useGame';
+import { formatAgo, formatClock, gameEnd, huntStart, isOnline, nextPingAt, teamOf, visibleFix } from './game/rules';
+import { useNow } from './hooks/useNow';
+import type { GamePlayerMarker } from './components/MapView';
 import { Toast } from './components/Toast';
-import { CloseIcon, LayersIcon, LocateFilledIcon, LocateIcon, TrainIcon } from './components/Icons';
+import { CloseIcon, FlagIcon, LayersIcon, LocateFilledIcon, LocateIcon, TrainIcon } from './components/Icons';
 import { BASEMAPS, DEFAULT_BASEMAP, type BasemapId, type OverlayId } from './lib/config';
 import { loadCantons, type CantonFeature } from './lib/cantons';
 import type { LatLng } from './lib/geo';
@@ -77,6 +82,57 @@ export function App() {
   const { pins, addPin, updatePin, removePin } = usePins();
   const geo = useGeolocation();
   const online = useOnline();
+  const game = useGame(geo.position);
+  const [inviteCode] = useState(() => takeInviteCode() ?? '');
+  const gameMeta = game.snapshot?.meta ?? null;
+  const gameNow = useNow(1000, !!gameMeta && gameMeta.phase !== 'ended');
+
+  // Einladungslink geöffnet: direkt den Spiel-Tab zeigen
+  useEffect(() => {
+    if (inviteCode && !game.session) setPanel({ type: 'game' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Im Spiel braucht es den Standort
+  useEffect(() => {
+    if (game.session && geo.status === 'off') geo.start();
+  }, [game.session, geo.status, geo.start]);
+
+  // Spielmeldungen als Hinweis anzeigen
+  const notice = game.snapshot?.notice;
+  useEffect(() => {
+    if (notice) setToast(notice.text);
+  }, [notice]);
+
+  const gamePlayers = useMemo<GamePlayerMarker[]>(() => {
+    const snap = game.snapshot;
+    const m = snap?.meta;
+    if (!snap || !m) return [];
+    const myTeam = teamOf(m, snap.me.id);
+    const now = Date.now();
+    return Object.values(snap.players)
+      .filter((p) => p.id !== snap.me.id)
+      .flatMap((p) => {
+        const v = visibleFix(m, myTeam, p);
+        if (!v) return [];
+        return [
+          {
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            team: teamOf(m, p.id),
+            lat: v.fix.lat,
+            lng: v.fix.lng,
+            kind: v.kind,
+            ago: v.kind === 'ping' ? formatAgo(now - v.fix.t) : undefined,
+            caught: !!p.caughtAt,
+            online: isOnline(p, now),
+          },
+        ];
+      });
+    // gameNow sorgt dafür, dass die Altersangaben regelmässig neu berechnet werden
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.snapshot, Math.floor(gameNow / 15000)]);
 
   const validBasemap = BASEMAPS.some((b) => b.id === basemap) ? basemap : DEFAULT_BASEMAP;
   const shownRoute = plan.result?.connections.find((c) => c.id === plan.selectedId) ?? null;
@@ -235,6 +291,7 @@ export function App() {
         selectedCantonId={panel?.type === 'canton' ? panel.canton.properties.id : null}
         stations={stations}
         route={shownRoute}
+        gamePlayers={gamePlayers}
         onBasemapError={() => {
           setToast('Strassenkarte nicht verfügbar – zeige Landeskarte');
           setBasemap('farbe');
@@ -250,6 +307,25 @@ export function App() {
       <header className="topbar">
         <SearchBar onSelect={handleSearch} onFocus={() => panel?.type !== 'place' && closePanel()} />
         {!online && <div className="banner">Offline – bereits geladene Karten bleiben sichtbar</div>}
+        {gameMeta && game.snapshot && panel?.type !== 'game' && (
+          <button className={`game-chip ${teamOf(gameMeta, game.snapshot.me.id)}`} onClick={() => setPanel({ type: 'game' })}>
+            <FlagIcon size={18} />
+            <span>
+              {gameMeta.phase === 'lobby'
+                ? `Lobby ${game.snapshot.code} · ${Object.keys(game.snapshot.players).length} Spieler`
+                : gameMeta.phase === 'ended'
+                  ? 'Spiel beendet · Resultat ansehen'
+                  : `${game.snapshot.players[game.snapshot.me.id]?.caughtAt ? 'Gefangen' : TEAM_LABEL[teamOf(gameMeta, game.snapshot.me.id)]} · ${
+                      gameNow < huntStart(gameMeta)
+                        ? `Vorsprung ${formatClock(huntStart(gameMeta) - gameNow)}`
+                        : `noch ${formatClock(gameEnd(gameMeta) - gameNow)}`
+                    }${(() => {
+                      const n = nextPingAt(gameMeta, gameNow);
+                      return n ? ` · Ping ${formatClock(n - gameNow)}` : '';
+                    })()}`}
+            </span>
+          </button>
+        )}
         {shownRoute && panel?.type !== 'route' && (
           <div className="route-chip">
             <button className="route-chip-main" onClick={() => setPanel({ type: 'route' })}>
@@ -271,7 +347,7 @@ export function App() {
             </button>
           </div>
         )}
-        {!hintSeen && !panel && !shownRoute && (
+        {!hintSeen && !panel && !shownRoute && !gameMeta && (
           <div className="hint">
             <span>
               <strong>Tipp:</strong> {finePointer ? 'Rechtsklick auf die Karte' : 'Lange auf die Karte drücken'} zeigt
@@ -393,14 +469,35 @@ export function App() {
       )}
       {panel?.type === 'game' && (
         <GameSheet
+          game={game}
+          prefillCode={inviteCode}
           geoStatus={geo.status}
           position={geo.position}
           onStartGps={() => {
             geo.start();
             setFollow(true);
           }}
+          onShowPlayer={(lat, lng) => focus({ lat, lng }, 16)}
+          onToast={setToast}
           onClose={closePanel}
         />
+      )}
+      {game.snapshot?.claim && (
+        <div className="dialog-backdrop" role="alertdialog" aria-label="Fang bestätigen">
+          <div className="dialog">
+            <FlagIcon size={28} />
+            <h2>{game.snapshot.players[game.snapshot.claim.by]?.name ?? 'Ein Jäger'} hat dich gefangen?</h2>
+            <p>Bestätige nur, wenn es stimmt. Danach bist du aus dem Rennen.</p>
+            <div className="dialog-actions">
+              <button className="wide-btn secondary" onClick={() => game.client?.denyClaim()}>
+                Stimmt nicht
+              </button>
+              <button className="wide-btn" onClick={() => game.client?.reportCaught(game.snapshot!.claim!.by)}>
+                Ja, gefangen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <TabBar active={activeTab} pinCount={pins.length} onSelect={selectTab} />

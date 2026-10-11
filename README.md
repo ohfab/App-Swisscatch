@@ -12,6 +12,8 @@ Sie ist die Grundlage für ein späteres **schweizweites Fangen-Spiel mit Freund
 
 ## Funktionen
 
+- **Das grosse Fangen:** Lobby mit Spielcode und Einladungslink, Teams aus Jägern und Gejagten, einstellbare Regeln und Live-Standorte auf der Karte. Mehr dazu unten.
+
 - **Strassenkarte im Google-Stil:** die Vektor-Basiskarte von swisstopo mit Strassennamen, Gebäuden, Haltestellen, ÖV-Linien und Sehenswürdigkeiten. Sie ist in jeder Zoomstufe scharf.
 - **Weitere Karten:** Luftbild mit Strassennamen, klassische Landeskarte und Winterkarte.
 - **Kantone:** farbige Grenzen und Namen. Antippen zeigt Hauptort, Fläche, Sprachen und Nachbarkantone.
@@ -24,6 +26,20 @@ Sie ist die Grundlage für ein späteres **schweizweites Fangen-Spiel mit Freund
 - **Pins:** Treffpunkte oder Verstecke speichern, benennen, einfärben, teilen. Sie bleiben auf dem Gerät gespeichert.
 - **Zusatzebenen:** ÖV-Haltestellen und Wanderwege.
 - **App-Gefühl:** Vollbild, Bottom-Sheets, Tab-Leiste, Dunkelmodus, installierbar, offline nutzbar für bereits geladene Kartenteile.
+
+## Das Spiel
+
+1. Eine Person tippt im Tab «Spiel» auf «Spiel erstellen» und teilt den Einladungslink.
+2. Die anderen öffnen den Link, geben ihren Namen ein und treten bei.
+3. In der Lobby wählt jede Person ihr Team, der Host legt die Regeln fest: Spieldauer, Vorsprung, Ping-Abstand, Sichtbarkeit der Jäger und ob Gefangene zu Jägern werden.
+4. Nach dem Start sehen die Jäger die Gejagten nur bei jedem Ping. Die Jäger selbst sind je nach Regel live, nur beim Ping oder gar nicht sichtbar.
+5. Ein Jäger meldet einen Fang, der Gejagte bestätigt ihn. Sind alle gefangen oder ist die Zeit um, endet die Runde mit einer Auswertung.
+
+**Technik:** Die Handys tauschen sich über einen öffentlichen MQTT-Broker aus, standardmässig `broker.emqx.io`. Alle Nachrichten sind mit einem Schlüssel aus dem Spielcode verschlüsselt (AES-GCM). Der Broker sieht deshalb weder Namen noch Standorte. Der Host verwaltet Teams und Spielstand. Verlässt er das Spiel, übernimmt automatisch der Spieler, der am längsten dabei ist.
+
+**Eigener Broker:** Beim Build `VITE_MQTT_URL=wss://…` setzen oder die App einmal mit `?broker=wss://…` öffnen.
+
+**Lokal testen:** `npm run broker` startet einen Broker auf `ws://127.0.0.1:1884`. Die App dann mit `?broker=ws://127.0.0.1:1884` öffnen.
 
 ## Loslegen
 
@@ -83,13 +99,11 @@ Die Kantonsdaten lassen sich mit `npm run geodata` neu erzeugen, etwa nach einer
 | ÖV-Haltestellen-Ebene | Bundesamt für Verkehr (BAV) | Freie Nutzung mit Quellenangabe |
 | Fahrplan und Abfahrten | [search.ch](https://search.ch/timetable/api/help) | Gratis, pro Tag 1000 Verbindungssuchen und 10'080 Abfahrtstafeln |
 | Kantonsgrenzen | BFS / swisstopo über [swiss-maps](https://github.com/interactivethings/swiss-maps) | BSD-3-Clause |
+| Spiel-Nachrichten | [EMQX Public Broker](https://www.emqx.com/en/mqtt/public-mqtt5-broker) | Gratis Testbroker ohne Garantie; Inhalte verschlüsselt |
 
-## Nächste Schritte zum Fangen-Spiel
+## Nächste Schritte
 
-Die App ist so gebaut, dass das Spiel als eigener Bereich dazukommen kann.
-
-1. **Backend für Echtzeit:** Lobby mit Spielcode und Live-Standorte über einen Dienst wie Supabase oder Firebase.
-2. **Spielregeln:** Rollen (Jäger und Gejagte), Spielzeit, Standort der Gejagten nur in Intervallen sichtbar.
+1. **Standort im Hintergrund:** Web-Apps senden den Standort nur, solange sie offen sind. Verpasste Pings holt die App beim Öffnen nach. Für echtes Hintergrund-Tracking lässt sich dieselbe App mit [Capacitor](https://capacitorjs.com) als native iOS- und Android-App verpacken.
+2. **Eigener Broker:** Für mehr Verlässlichkeit ein eigener, kostenloser Cloud-Broker (z.B. HiveMQ Cloud oder EMQX Serverless) statt des öffentlichen Testbrokers.
 3. **Zonen:** Spielfeld eingrenzen, Kantone sperren, schrumpfende Zonen. Die Kantonsdaten sind schon da.
-4. **Fang bestätigen:** über Nähe-Check oder QR-Code.
-5. **Standort im Hintergrund:** Web-Apps teilen den Standort nur, solange sie offen sind. Für echtes Hintergrund-Tracking lässt sich dieselbe App mit [Capacitor](https://capacitorjs.com) als native iOS- und Android-App verpacken.
+4. **ÖV-Regeln:** z.B. nur bestimmte Verkehrsmittel erlaubt oder Fahrplan-Aufgaben für die Gejagten.

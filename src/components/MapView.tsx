@@ -21,6 +21,20 @@ import type { Position } from '../hooks/useGeolocation';
 import { KIND_COLOR, type Connection, type Station } from '../lib/transport';
 import { stationEmoji } from './stationIcons';
 
+export interface GamePlayerMarker {
+  id: string;
+  name: string;
+  color: string;
+  team: 'hunter' | 'runner';
+  lat: number;
+  lng: number;
+  kind: 'live' | 'ping';
+  /** z.B. "vor 3 Min" bei Pings */
+  ago?: string;
+  caught: boolean;
+  online: boolean;
+}
+
 export interface MapViewProps {
   basemap: BasemapId;
   overlays: Record<OverlayId, boolean>;
@@ -32,6 +46,8 @@ export interface MapViewProps {
   stations: Station[];
   /** Gewählte ÖV-Verbindung, die als Linie gezeichnet wird */
   route: Connection | null;
+  /** Mitspieler im laufenden Spiel */
+  gamePlayers: GamePlayerMarker[];
   onBasemapError?: () => void;
   onReady: (map: L.Map) => void;
   onTap: (p: LatLng, canton: CantonFeature | null) => void;
@@ -106,6 +122,7 @@ export function MapView(props: MapViewProps) {
 
   const baseLayerRef = useRef<L.Layer | null>(null);
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
+  const gameLayerRef = useRef<L.LayerGroup | null>(null);
   const overlayLayersRef = useRef<Partial<Record<OverlayId, L.Layer>>>({});
   const cantonLayerRef = useRef<L.GeoJSON | null>(null);
   const cantonLabelsRef = useRef<L.LayerGroup | null>(null);
@@ -208,6 +225,7 @@ export function MapView(props: MapViewProps) {
       pinLayerRef.current = null;
       stationLayerRef.current = null;
       routeLayerRef.current = null;
+      gameLayerRef.current = null;
       positionRef.current = null;
       selectionRef.current = null;
       hadFixRef.current = false;
@@ -393,6 +411,30 @@ export function MapView(props: MapViewProps) {
         .addTo(group);
     }
   }, [props.stations]);
+
+  // Mitspieler
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    gameLayerRef.current ??= L.layerGroup().addTo(map);
+    const group = gameLayerRef.current;
+    group.clearLayers();
+    for (const p of props.gamePlayers) {
+      const initial = escapeHtml((p.name.trim()[0] ?? '?').toUpperCase());
+      const label = escapeHtml(p.name) + (p.ago ? ` · ${escapeHtml(p.ago)}` : '');
+      L.marker([p.lat, p.lng], {
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: p.team === 'hunter' ? 800 : 900,
+        icon: L.divIcon({
+          className: `gp-marker ${p.team} ${p.kind} ${p.caught ? 'caught' : ''} ${p.online ? '' : 'offline'}`,
+          html: `<span class="gp-dot" style="background:${p.color}">${initial}</span><span class="gp-label">${label}</span>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        }),
+      }).addTo(group);
+    }
+  }, [props.gamePlayers]);
 
   // Gewählte ÖV-Verbindung
   useEffect(() => {
