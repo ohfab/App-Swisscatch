@@ -12,6 +12,7 @@ import { distanceMeters, formatDistance, formatNumber } from '../lib/geo';
 import { normalizeCode, CODE_LENGTH } from '../game/crypto';
 import { Avatar, TEAM_ICON, TEAM_LABEL } from './game/common';
 import { HiderView, SeekerView } from './game/TeamViews';
+import { Blob } from './Art';
 
 interface Props {
   game: GameApi;
@@ -46,6 +47,16 @@ function StartView({ game, prefillCode }: { game: GameApi; prefillCode: string }
 
   return (
     <>
+      <div className="game-hero">
+        <div className="game-hero-art" aria-hidden="true">
+          <Blob size={70} color="white" hiding className="hero-hider" />
+          <Blob size={76} color="ink" magnifier className="hero-seeker" />
+        </div>
+        <div>
+          <h3>Versteck dich – oder such!</h3>
+          <p>Die Hälfte versteckt sich irgendwo in der Schweiz, die anderen suchen mit Zug und Power-ups.</p>
+        </div>
+      </div>
       <label className="field">
         <span>Dein Name</span>
         <input value={name} maxLength={20} placeholder="z.B. Fabi" onChange={(e) => setName(e.target.value)} onBlur={commitName} />

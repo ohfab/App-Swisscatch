@@ -19,8 +19,8 @@ export default defineConfig({
         short_name: 'SwissCatch',
         description: 'Interaktive Schweizerkarte – die Basis für das grosse Fangen quer durch die Schweiz.',
         lang: 'de-CH',
-        theme_color: '#D52B1E',
-        background_color: '#f4f1ec',
+        theme_color: '#1F1C35',
+        background_color: '#1F1C35',
         display: 'standalone',
         orientation: 'portrait',
         start_url: base,
@@ -32,7 +32,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,mjs,css,html,svg,png,geojson}'],
+        globPatterns: ['**/*.{js,mjs,css,html,svg,png,geojson,woff2}'],
         navigateFallback: 'index.html',
         runtimeCaching: [
           {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { loadCantons, type CantonProps } from '../../lib/cantons';
 import { compressPhoto } from '../../game/photo';
 import type { FeedItem } from '../../game/derive';
@@ -146,7 +146,8 @@ export function Feed({ items, photos, team, empty }: { items: FeedItem[]; photos
 
 export function Tabs<T extends string>({ value, options, onChange }: { value: T; options: { id: T; label: string; badge?: number }[]; onChange: (v: T) => void }) {
   return (
-    <div className="game-tabs" role="tablist">
+    <div className="game-tabs" role="tablist" style={{ '--n': options.length, '--i': Math.max(0, options.findIndex((o) => o.id === value)) } as CSSProperties}>
+      <span className="game-tabs-indicator" aria-hidden="true" />
       {options.map((o) => (
         <button key={o.id} role="tab" aria-selected={value === o.id} className={value === o.id ? 'active' : ''} onClick={() => onChange(o.id)}>
           {o.label}

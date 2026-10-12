@@ -136,4 +136,4 @@ export const MIN_ZOOM = 6.5;
 export const MAX_ZOOM = 19;
 
 /** Farbpalette für die Kantonsflächen (Index aus der Vorberechnung) */
-export const CANTON_COLORS = ['#e4572e', '#3f88c5', '#44af69', '#f3a712', '#8e5ea2', '#2bb3a6'];
+export const CANTON_COLORS = ['#f2914f', '#7c74c9', '#f9b07e', '#4b4580', '#e8a07a', '#a59fd9'];

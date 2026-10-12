@@ -1,5 +1,6 @@
 import { BottomSheet } from './BottomSheet';
-import { PinIcon, PlusIcon } from './Icons';
+import { Blob } from './Art';
+import { PlusIcon } from './Icons';
 import { distanceMeters, formatDistance } from '../lib/geo';
 import type { Pin } from '../hooks/usePins';
 import type { Position } from '../hooks/useGeolocation';
@@ -36,7 +37,7 @@ export function PinsSheet({ pins, position, onSelect, onAddAtPosition, onClose }
       )}
       {pins.length === 0 ? (
         <div className="empty">
-          <PinIcon size={36} />
+          <Blob size={84} color="ink" />
           <p>
             <strong>Lange auf die Karte drücken</strong> (am Computer: Rechtsklick), um einen Ort zu markieren und
             als Pin zu speichern – z.B. Treffpunkte oder Verstecke.

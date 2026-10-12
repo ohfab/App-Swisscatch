@@ -40,8 +40,8 @@ const WORLD: L.LatLngTuple[] = [
   [56, 25],
   [40, 25],
 ];
-const AREA_STYLE: L.PolylineOptions = { pane: 'gameMask', interactive: false, stroke: false, fillColor: '#0f172a', fillOpacity: 0.42 };
-const EDGE_STYLE: L.PolylineOptions = { pane: 'gameMask', interactive: false, color: '#facc15', weight: 3, opacity: 0.95, dashArray: '8 6', fill: false };
+const AREA_STYLE: L.PolylineOptions = { pane: 'gameMask', interactive: false, stroke: false, fillColor: '#1f1c35', fillOpacity: 0.5 };
+const EDGE_STYLE: L.PolylineOptions = { pane: 'gameMask', interactive: false, color: '#f2914f', weight: 3.5, opacity: 1, dashArray: '10 7', lineCap: 'round', fill: false };
 
 export interface GamePlayerMarker {
   id: string;
@@ -108,7 +108,7 @@ function pinIcon(pin: Pin): L.DivIcon {
 const HIDDEN_VECTOR_LAYERS = ['place_country'];
 
 /** Farbe der Fläche ausserhalb der Schweiz (auch Hintergrund der Karte) */
-const MASK_COLOR = '#4a515c';
+const MASK_COLOR = '#2a2741';
 
 const selectionIcon = L.divIcon({
   className: 'selection-marker',
@@ -122,9 +122,9 @@ function cantonStyle(f: CantonFeature | undefined, selectedId: number | null): L
   const selected = f?.properties.id === selectedId;
   return {
     className: 'canton-shape',
-    color: selected ? '#D52B1E' : '#5b4636',
-    weight: selected ? 3.5 : 1.1,
-    opacity: selected ? 1 : 0.55,
+    color: selected ? '#f2914f' : '#1f1c35',
+    weight: selected ? 4 : 1.1,
+    opacity: selected ? 1 : 0.5,
     fillColor: color,
     fillOpacity: selected ? 0.22 : 0.08,
   };
@@ -238,7 +238,7 @@ export function MapView(props: MapViewProps) {
         L.geoJSON(country, {
           pane: 'mask',
           interactive: false,
-          style: { color: '#D52B1E', weight: 2.5, opacity: 0.9, fill: false },
+          style: { color: '#ffffff', weight: 3, opacity: 0.95, fill: false },
         }).addTo(map);
       })
       .catch(() => undefined);

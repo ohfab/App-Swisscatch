@@ -36,6 +36,7 @@ Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC.
 - **Pins:** Treffpunkte oder Verstecke speichern, benennen, einfärben, teilen. Sie bleiben auf dem Gerät gespeichert.
 - **Zusatzebenen:** ÖV-Haltestellen und Wanderwege.
 - **App-Gefühl:** Vollbild, Bottom-Sheets, Tab-Leiste, Dunkelmodus, installierbar, offline nutzbar für bereits geladene Kartenteile.
+- **Design «Tinte & Pfirsich»:** klare Konturen, Pillen-Knöpfe, tropfende Kopfzeilen, das Maskottchen Blobi und viele kleine Animationen (springende Tab-Blase, gleitende Tabs, Glücksrad, Versus-Screen).
 
 ## Das Spiel: Versteckis Schweiz
 
@@ -95,7 +96,7 @@ Die Hälfte der Gruppe versteckt sich irgendwo in der Schweiz, die andere Hälft
 Die App läuft auch im Browser am Computer, die Karte nutzt dann den ganzen Bildschirm, das Menü sitzt links.
 
 1. https://ohfab.github.io/App-Swisscatch/ in Chrome oder Edge öffnen.
-2. Zum Installieren auf das Installieren-Symbol rechts in der Adressleiste klicken oder in der App oben rechts auf den roten Download-Knopf. In Edge geht es auch über das Menü «Apps → Diese Website als App installieren».
+2. Zum Installieren auf das Installieren-Symbol rechts in der Adressleiste klicken oder in der App oben rechts auf den Download-Knopf. In Edge geht es auch über das Menü «Apps → Diese Website als App installieren».
 3. Die App startet danach in einem eigenen Fenster und erscheint im Startmenü bzw. im Dock.
 
 Am PC ist der Standort meist ungenau (WLAN-Ortung). Zum Spielen unterwegs eignet sich deshalb das Handy.
@@ -129,7 +130,9 @@ Er lässt sich auch von Hand im Tab «Actions» starten.
 ```
 src/
   App.tsx                 Zustand der App, Sheets, Kartensteuerung
+  styles/                 Design «Tinte & Pfirsich»: base (Farben, Schrift), map, shell, content, game, show, desktop
   components/
+    Art.tsx               Grafiken: tropfende Kanten und Maskottchen Blobi
     MapView.tsx           Leaflet-Karte mit MapLibre-Vektorkarte, Kantone, Pins, Route, Standort
     SearchBar.tsx         Ortssuche
     PlaceSheet.tsx        Infos zu einem Punkt, Pins, ÖV
@@ -169,6 +172,7 @@ Die Kantonsdaten lassen sich mit `npm run geodata` neu erzeugen, etwa nach einer
 | Kantonsgrenzen | BFS / swisstopo über [swiss-maps](https://github.com/interactivethings/swiss-maps) | BSD-3-Clause |
 | Gemeinde am Versteck | swisstopo, Gemeindegrenzen über api3.geo.admin.ch | Freie Nutzung mit Quellenangabe |
 | Einwohnerzahl und Amtssprache der Gemeinde | [Wikidata](https://www.wikidata.org) | CC0 |
+| Schrift Outfit | [Google Fonts](https://fonts.google.com/specimen/Outfit) über Fontsource | SIL Open Font License |
 | Spiel-Nachrichten | [EMQX Public Broker](https://www.emqx.com/en/mqtt/public-mqtt5-broker) | Gratis Testbroker ohne Garantie; Inhalte verschlüsselt |
 
 ## Nächste Schritte

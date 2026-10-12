@@ -1,0 +1,118 @@
+/* ---------- Tablet & Desktop ---------- */
+
+@media (min-width: 768px) {
+  .topbar {
+    right: auto;
+    left: 16px;
+    width: 390px;
+  }
+
+  .hint,
+  .banner {
+    max-width: 100%;
+  }
+
+  .fabs {
+    top: calc(var(--safe-top) + 12px);
+    right: 16px;
+  }
+
+  .sheet {
+    left: 16px;
+    right: auto;
+    top: calc(var(--safe-top) + 76px);
+    bottom: auto;
+    width: 390px;
+    max-height: calc(100% - var(--safe-top) - 76px - var(--tabbar-h) - 40px);
+    padding-bottom: 0;
+    border: var(--bw) solid var(--ink);
+    border-radius: 30px;
+    box-shadow: 0 6px 0 var(--ink);
+    animation: sheet-in-desk 0.55s var(--spring);
+  }
+
+  @keyframes sheet-in-desk {
+    from {
+      transform: translateX(-40px) scale(0.96);
+      opacity: 0;
+    }
+  }
+
+  .sheet-grip {
+    height: 14px;
+    border-radius: 28px 28px 0 0;
+  }
+
+  .sheet-grip span {
+    visibility: hidden;
+  }
+
+  .sheet-body {
+    border-radius: 0 0 28px 28px;
+  }
+
+  .tabbar {
+    left: 50%;
+    right: auto;
+    bottom: 16px;
+    width: 420px;
+    height: var(--tabbar-h);
+    padding: 0 10px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+  }
+
+  .leaflet-bottom {
+    bottom: 0;
+  }
+
+  .toast {
+    bottom: calc(var(--tabbar-h) + 34px);
+  }
+}
+
+/* Auslosung und Versus auf grossen Bildschirmen (PC) */
+@media (min-width: 900px) and (min-height: 640px) {
+  .wheel-wrap {
+    width: min(56vh, 470px);
+  }
+
+  .wheel-hub {
+    width: 96px;
+    height: 96px;
+  }
+
+  .draw-title span {
+    font-size: 50px;
+  }
+
+  .draw-drips {
+    height: 120px;
+  }
+
+  .vs-team {
+    gap: 24px;
+  }
+
+  .vs-team li {
+    zoom: 1.6;
+  }
+
+  .vs-footer strong {
+    font-size: 30px;
+  }
+
+  .vs-footer span {
+    font-size: 18px;
+  }
+
+  .vs-half {
+    padding-left: 60px;
+    padding-right: 60px;
+  }
+
+  .vs-half.seekers > .vs-drips {
+    height: 90px;
+  }
+}

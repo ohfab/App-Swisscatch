@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Drips } from './Art';
 import { CloseIcon } from './Icons';
 
 interface Props {
@@ -99,6 +100,7 @@ export function BottomSheet(props: Props) {
         >
           <CloseIcon size={20} />
         </button>
+        <Drips className="sheet-drip" />
       </header>
       <div className="sheet-body" hidden={peek} ref={body}>
         {children}
