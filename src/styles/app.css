@@ -194,3 +194,200 @@
 .layers-app-btn {
   margin-top: 18px;
 }
+
+/* ---------- Einführung beim ersten Start ---------- */
+
+.onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--fg);
+  animation: fade-in 0.35s ease;
+  touch-action: pan-y;
+}
+
+.ob-drips {
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  top: 0;
+  height: calc(var(--safe-top) + 120px);
+  color: var(--band);
+  transform-origin: top center;
+  animation: drip-in 1.2s var(--spring) both;
+}
+
+.ob-drips .drips {
+  height: 100%;
+}
+
+.ob-skip {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--safe-top) + 14px);
+  right: 16px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1.5px solid #fff;
+  background: var(--ink);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ob-slide {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: min(100%, 460px);
+  padding: 120px 28px 20px;
+  animation: ob-in 0.5s var(--spring);
+}
+
+@keyframes ob-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+
+.ob-art {
+  display: grid;
+  place-items: center;
+  min-height: 190px;
+  margin-bottom: 26px;
+}
+
+.ob-art .blob,
+.ob-app-icon {
+  animation: ob-float 3.2s ease-in-out infinite;
+}
+
+.ob-app-icon {
+  border-radius: 40px;
+  box-shadow: 0 8px 0 var(--peach);
+}
+
+@keyframes ob-float {
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.ob-icons {
+  display: flex;
+  gap: 14px;
+}
+
+.ob-icons span {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: var(--bw) solid var(--stroke);
+  background: var(--peach-soft);
+  animation: pop-in 0.5s var(--spring) backwards;
+}
+
+.ob-icons span:nth-child(2) {
+  background: var(--peach);
+  animation-delay: 0.1s;
+  transform: translateY(-16px);
+}
+
+.ob-icons span:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.ob-duo {
+  display: flex;
+  align-items: flex-end;
+}
+
+.ob-duo .blob:first-child {
+  margin-right: -26px;
+  animation-delay: -1.2s;
+}
+
+.ob-title {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 500;
+}
+
+.ob-title strong {
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.ob-text {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.ob-app-btn {
+  margin-top: 20px;
+}
+
+.ob-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100%, 460px);
+  padding: 0 24px calc(var(--safe-bottom) + 28px);
+}
+
+.ob-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.ob-dots button {
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--line);
+  transition:
+    width 0.35s var(--spring),
+    background 0.2s ease;
+}
+
+.ob-dots button.active {
+  width: 28px;
+  background: var(--peach-strong);
+}
+
+.ob-next {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: var(--bw) solid var(--ink);
+  background: var(--peach);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 850;
+  box-shadow: 0 5px 0 var(--ink);
+  transition: transform 0.3s var(--spring);
+}
+
+.ob-next:hover {
+  transform: scale(1.05);
+}
+
+.ob-next:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 var(--ink);
+}

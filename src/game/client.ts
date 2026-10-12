@@ -6,6 +6,7 @@ import { derive, drawDuration, VERSUS_MS } from './derive';
 import { powerUp, rng, trap } from './content';
 import type { Action, DrawInfo, Fix, GameMeta, GameSettings, Me, PlayerState, SpotFacts, Team } from './types';
 import { distanceMeters } from '../lib/geo';
+import { buzz, type SoundName } from '../lib/sound';
 
 export type ConnState = 'connecting' | 'online' | 'offline';
 
@@ -19,8 +20,8 @@ export interface GameSnapshot {
   photos: Record<string, string>;
   /** Spiel unter diesem Code nicht gefunden */
   notFound: boolean;
-  /** Letzte Meldung für einen Hinweis */
-  notice: { text: string; t: number } | null;
+  /** Letzte Meldung für einen Hinweis (mit passendem Ton) */
+  notice: { text: string; t: number; sound?: SoundName } | null;
   /** Versatz der eigenen Uhr zur Spieluhr (Uhr des Hosts) in ms */
   clockOffset: number;
 }
@@ -81,9 +82,9 @@ export class GameClient {
     this.listeners.forEach((l) => l());
   }
 
-  private notify(text: string, vibrate = false) {
-    this.set({ notice: { text, t: Date.now() } });
-    if (vibrate) navigator.vibrate?.([120, 60, 120]);
+  private notify(text: string, vibrate = false, sound?: SoundName) {
+    this.set({ notice: { text, t: Date.now(), ...(sound ? { sound } : {}) } });
+    if (vibrate) buzz([120, 60, 120]);
   }
 
   get meta(): GameMeta | null {
@@ -254,20 +255,22 @@ export class GameClient {
   /** Neue Aktionen anderer Spieler als kurze Meldung zeigen */
   private announce(prev: PlayerState | undefined, p: PlayerState) {
     const m = this.snap.meta;
-    if (!prev || !m || m.phase !== 'running') return;
+    if (!prev || !m || m.phase === 'ended') return;
     const known = new Set(prev.actions.map((a) => a.id));
     const fresh = p.actions.filter((a) => !known.has(a.id) && a.round === m.round);
     const mineTeam = this.myTeam;
     const theirTeam = this.teamOf(p.id);
     for (const a of fresh) {
-      if (a.kind === 'trap' && mineTeam === 'seeker') this.notify(`${trap(a.type).icon} Falle! ${trap(a.type).name}: ${trap(a.type).effect}`, true);
-      else if (a.kind === 'powerup' && mineTeam === 'hider') this.notify(`${powerUp(a.type).icon} Die Fänger nutzen «${powerUp(a.type).name}».`, a.type === 'photo');
-      else if (a.kind === 'powerup' && mineTeam === 'seeker') this.notify(`${powerUp(a.type).icon} ${p.name} hat «${powerUp(a.type).name}» gekauft.`);
-      else if (a.kind === 'challenge' && theirTeam === mineTeam) this.notify(`✅ ${p.name} hat die Challenge erledigt.`);
-      else if (a.kind === 'challenge' && mineTeam === 'seeker') this.notify('🕵️ Neuer Hinweis von den Versteckern!');
-      else if (a.kind === 'photo-answer' && mineTeam === 'seeker') this.notify('📸 Die Verstecker haben ein Foto geschickt!');
-      else if (a.kind === 'spot' && mineTeam === 'seeker') this.notify('🏠 Die Verstecker haben ihr Versteck eingeloggt.');
-      else if (a.kind === 'found') this.notify(`🎯 ${p.name} meldet: Gefunden!`, true);
+      if (a.kind === 'trap' && mineTeam === 'seeker') this.notify(`${trap(a.type).icon} Falle! ${trap(a.type).name}: ${trap(a.type).effect}`, true, 'trap');
+      else if (a.kind === 'powerup' && mineTeam === 'hider') this.notify(`${powerUp(a.type).icon} Die Fänger nutzen «${powerUp(a.type).name}».`, a.type === 'photo', a.type === 'photo' ? 'challenge' : 'tick');
+      else if (a.kind === 'powerup' && mineTeam === 'seeker') this.notify(`${powerUp(a.type).icon} ${p.name} hat «${powerUp(a.type).name}» gekauft.`, false, 'buy');
+      else if (a.kind === 'thermo' && mineTeam === 'hider') this.notify('🌡️ Die Fänger messen mit dem Thermometer.', false, 'tick');
+      else if (a.kind === 'challenge' && theirTeam === mineTeam) this.notify(`✅ ${p.name} hat die Challenge erledigt.`, false, 'right');
+      else if (a.kind === 'challenge' && mineTeam === 'seeker') this.notify('🕵️ Neuer Hinweis von den Versteckern!', false, 'chat');
+      else if (a.kind === 'photo-answer' && mineTeam === 'seeker') this.notify('📸 Die Verstecker haben ein Foto geschickt!', false, 'chat');
+      else if (a.kind === 'spot' && mineTeam === 'seeker') this.notify('🏠 Die Verstecker haben ihr Versteck eingeloggt.', false, 'tick');
+      else if (a.kind === 'found') this.notify(`🎯 ${p.name} meldet: Gefunden!`, true, 'found');
+      else if (a.kind === 'chat' && (a.t < (m.draw?.at ?? Infinity) || theirTeam === mineTeam)) this.notify(`💬 ${p.name}: ${a.text}`, false, 'chat');
     }
   }
 
@@ -374,7 +377,14 @@ export class GameClient {
   addAction(a: NewAction): Action {
     const m = this.snap.meta;
     const action = { ...a, id: newId(), t: this.now(), round: m?.round ?? 1 } as Action;
-    this.mine = { ...this.mine, actions: [...this.mine.actions, action] };
+    let actions = [...this.mine.actions, action];
+    // Chat begrenzen, damit die gespeicherte Nachricht klein bleibt
+    const chats = actions.filter((x) => x.kind === 'chat');
+    if (chats.length > 40) {
+      const drop = new Set(chats.slice(0, chats.length - 40).map((x) => x.id));
+      actions = actions.filter((x) => !drop.has(x.id));
+    }
+    this.mine = { ...this.mine, actions };
     void this.publishMe();
     return action;
   }
@@ -405,7 +415,13 @@ export class GameClient {
     void this.publishMeta({ ...m, settings: { ...m.settings, ...patch } });
   }
 
-  /** Teams auslosen: Hälfte Verstecker (abgerundet), Rest Fänger */
+  /** Host: Spielfeld festlegen (Kantonskürzel; leer = ganze Schweiz) */
+  updateField(abbrs: string[]) {
+    const m = this.meta;
+    if (!m || !this.isHost || m.phase !== 'lobby') return;
+    void this.publishMeta({ ...m, field: [...new Set(abbrs)].sort() });
+  }
+
   /** Host: Teams auslosen. Mit `swap` verstecken sich die Fänger der letzten Runde. */
   draw(swap = false) {
     const m = this.meta;

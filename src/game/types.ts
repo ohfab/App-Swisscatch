@@ -56,6 +56,8 @@ export interface GameMeta {
   endReason?: 'found' | 'time' | 'host';
   /** Verstecker der letzten Runde, für «Rollen tauschen» */
   lastHiders?: string[];
+  /** Spielfeld: erlaubte Kantone (Kürzel); leer oder fehlend = ganze Schweiz */
+  field?: string[];
 }
 
 export interface Fix {
@@ -75,6 +77,11 @@ export interface SpotFacts {
   languages?: string[];
   altitude?: number;
   station?: { name: string; dist: number };
+  /** See im Umkreis von 1 km bzw. grosser Fluss in der Nähe (Name), null = keiner */
+  lake?: string | null;
+  river?: string | null;
+  /** ÖV-Linien an der nächsten Haltestelle */
+  lines?: string[];
 }
 
 export type PowerUpId =
@@ -88,9 +95,14 @@ export type PowerUpId =
   | 'station'
   | 'language'
   | 'canton'
-  | 'photo';
+  | 'photo'
+  | 'higher'
+  | 'water'
+  | 'letter'
+  | 'thermo'
+  | 'line';
 
-export type TrapId = 'jam' | 'inflation' | 'steal' | 'fog';
+export type TrapId = 'jam' | 'inflation' | 'steal' | 'fog' | 'cloak' | 'freeze';
 
 export type PowerUpResult =
   | { type: 'radar'; inside: boolean; km: number; lat: number; lng: number }
@@ -101,6 +113,11 @@ export type PowerUpResult =
   | { type: 'language'; languages: string[] }
   | { type: 'canton'; abbr: string; name: string }
   | { type: 'photo' }
+  | { type: 'higher'; higher: boolean; mine: number }
+  | { type: 'water'; near: boolean }
+  | { type: 'letter'; firstHalf: boolean }
+  | { type: 'thermo-start'; lat: number; lng: number }
+  | { type: 'line'; shared: string[]; station: string }
   | { type: 'unknown' };
 
 export type ChallengeAnswer =
@@ -122,7 +139,9 @@ export type Action =
   | (Base & { kind: 'riddle'; n: number; value: string; correct: boolean })
   | (Base & { kind: 'trap'; type: TrapId; cost: number })
   | (Base & { kind: 'found'; dist: number; lat: number; lng: number; acc?: number })
-  | (Base & { kind: 'confirm-found'; claimId: string });
+  | (Base & { kind: 'confirm-found'; claimId: string })
+  | (Base & { kind: 'thermo'; powerupId: string; lat: number; lng: number; closer: boolean })
+  | (Base & { kind: 'chat'; text: string });
 
 /** Von jedem Spieler selbst verwaltet, als «retained» Nachricht gespeichert */
 export interface PlayerState {

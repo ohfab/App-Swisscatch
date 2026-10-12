@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameClient, GameSnapshot } from '../../game/client';
-import { POWERUPS, TRAPS, REWARD, type ChallengeDef } from '../../game/content';
-import { atSpot, priceOf, type ChallengeState, type Derived } from '../../game/derive';
+import { inField, POWERUPS, THERMO_MIN_M, TRAPS, REWARD, type ChallengeDef } from '../../game/content';
+import { atSpot, priceOf, type ChallengeState, type Derived, type ThermoState } from '../../game/derive';
+import { buzz, play } from '../../lib/sound';
+import { ChatPanel, useUnreadChat } from './Chat';
 import { formatAgo, formatClock, formatTimeOfDay, isOnline } from '../../game/rules';
 import type { Team } from '../../game/types';
 import type { Position } from '../../hooks/useGeolocation';
@@ -78,7 +80,15 @@ function QuizButtons({ def, picked, onPick, disabled }: { def: ChallengeDef; pic
       {def.input.options.map((o) => {
         const state = picked === undefined ? '' : o === correct ? 'right' : o === picked ? 'wrong' : '';
         return (
-          <button key={o} className={`quiz-option ${state} ${picked === o ? 'chosen' : ''}`} disabled={disabled || picked !== undefined} onClick={() => onPick(o)}>
+          <button
+            key={o}
+            className={`quiz-option ${state} ${picked === o ? 'chosen' : ''}`}
+            disabled={disabled || picked !== undefined}
+            onClick={() => {
+              if (correct !== undefined) play(o === correct ? 'right' : 'wrong');
+              onPick(o);
+            }}
+          >
             {o}
           </button>
         );
@@ -121,6 +131,40 @@ function RiddleCard({ client, d, now }: Pick<ViewProps, 'client' | 'd' | 'now'>)
   );
 }
 
+function ThermoCard({ th, d, client, now, position, onToast }: { th: ThermoState; d: Derived; client: GameClient; now: number; position: Position | null; onToast: (m: string) => void }) {
+  const moved = position ? distanceMeters(position, th.start) : 0;
+  const ready = moved >= THERMO_MIN_M && !!d.spot && !!position;
+  const pct = Math.min(100, (moved / THERMO_MIN_M) * 100);
+  return (
+    <div className={`challenge-card thermo ${ready ? 'urgent' : ''}`}>
+      <div className="challenge-head">
+        <span className="challenge-icon">🌡️</span>
+        <div>
+          <small>Thermometer · gestartet {formatTimeOfDay(th.t)}</small>
+          <strong>{ready ? 'Bereit – jetzt messen!' : `Geht weiter: ${formatDistance(moved)} von ${formatDistance(THERMO_MIN_M)}`}</strong>
+        </div>
+      </div>
+      <div className="thermo-bar" aria-hidden="true">
+        <span style={{ width: `${pct}%` }} />
+      </div>
+      <button
+        className="wide-btn start"
+        disabled={!ready}
+        onClick={() => {
+          if (!position || !d.spot) return;
+          const closer = distanceMeters(position, d.spot.fix) < distanceMeters(th.start, d.spot.fix);
+          client.addAction({ kind: 'thermo', powerupId: th.id, lat: position.lat, lng: position.lng, closer });
+          const fogged = (d.revealAt[th.id] ?? 0) > now;
+          play(fogged ? 'tick' : closer ? 'right' : 'wrong');
+          onToast(fogged ? '🌫️ Gemessen – die Antwort kommt nach dem Nebel.' : closer ? '🔥 Wärmer! Ihr seid näher dran.' : '🧊 Kälter! Ihr habt euch entfernt.');
+        }}
+      >
+        🌡️ Messen
+      </button>
+    </div>
+  );
+}
+
 export function SeekerView(props: ViewProps) {
   const { client, snap, d, now, position, onToast } = props;
   const [tab, setTab] = usePersistentState<'shop' | 'clues' | 'riddle' | 'team'>('game.tab.seeker', 'shop');
@@ -128,13 +172,22 @@ export function SeekerView(props: ViewProps) {
   const jammed = d.jammedUntil !== null;
   const cluesCount = d.feed.filter((f) => f.audience !== 'hider').length;
 
+  const unread = useUnreadChat(snap, d, 'seeker', tab === 'team');
+  const [buying, setBuying] = useState(false);
   const buy = async (id: (typeof POWERUPS)[number]['id'], price: number) => {
-    const { computePowerUp } = await import('../../game/facts');
-    const result = computePowerUp(id, d.spot ? { fix: d.spot.fix, facts: d.spot.facts } : null, position);
-    client.addAction({ kind: 'powerup', type: id, cost: price, result });
-    onToast(result.type === 'unknown' ? 'Keine Antwort möglich – Punkte zurück.' : 'Power-up gekauft!');
-    setTab('clues');
+    setBuying(true);
+    try {
+      const { computePowerUp } = await import('../../game/facts');
+      const result = await computePowerUp(id, d.spot ? { fix: d.spot.fix, facts: d.spot.facts } : null, position);
+      client.addAction({ kind: 'powerup', type: id, cost: price, result });
+      play(result.type === 'unknown' ? 'wrong' : 'buy');
+      onToast(result.type === 'unknown' ? 'Keine Antwort möglich – Punkte zurück.' : result.type === 'thermo-start' ? '🌡️ Thermometer läuft – geht jetzt 1 km weit.' : 'Power-up gekauft!');
+      if (result.type !== 'thermo-start') setTab('clues');
+    } finally {
+      setBuying(false);
+    }
   };
+  const openThermos = d.thermos.filter((t) => !t.measure);
 
   return (
     <>
@@ -149,14 +202,16 @@ export function SeekerView(props: ViewProps) {
         <Points value={d.seekerPoints} />
       </div>
 
+      {d.frozenUntil && <div className="info-banner bad freeze-banner">🛑 Stopp! Bis {formatTimeOfDay(d.frozenUntil)} stehen bleiben – kein Zug, kein Laufen.</div>}
+
       <Tabs
         value={tab}
         onChange={setTab}
         options={[
-          { id: 'shop', label: 'Power-ups' },
+          { id: 'shop', label: 'Power-ups', badge: openThermos.length },
           { id: 'clues', label: 'Hinweise', badge: cluesCount },
           { id: 'riddle', label: 'Rätsel', badge: d.riddle && !d.riddle.attempt ? 1 : 0 },
-          { id: 'team', label: 'Team' },
+          { id: 'team', label: 'Team', badge: unread },
         ]}
       />
 
@@ -169,19 +224,26 @@ export function SeekerView(props: ViewProps) {
           {position && position.accuracy > 300 && (
             <div className="info-banner">📡 Dein GPS ist ungenau (±{formatDistance(position.accuracy)}). Radar und «Karte halbieren» rechnen mit diesem ungefähren Standort.</div>
           )}
+          {openThermos.map((th) => (
+            <ThermoCard key={th.id} th={th} d={d} client={client} now={now} position={position} onToast={onToast} />
+          ))}
           <ul className="shop">
             {POWERUPS.map((p) => {
               const price = priceOf(d, p.cost);
-              const needsPos = p.id.startsWith('radar') || p.id.startsWith('half');
+              const needsPos = p.id.startsWith('radar') || p.id.startsWith('half') || ['thermo', 'higher', 'line'].includes(p.id);
               const reason = !seeking
                 ? 'ab Suchbeginn'
                 : jammed
                   ? 'Funkstille'
-                  : d.seekerPoints < price
-                    ? `noch ${price - d.seekerPoints} P`
-                    : needsPos && !position
-                      ? 'Standort fehlt'
-                      : null;
+                  : buying
+                    ? '…'
+                    : d.seekerPoints < price
+                      ? `noch ${price - d.seekerPoints} P`
+                      : needsPos && !position
+                        ? 'Standort fehlt'
+                        : p.id === 'thermo' && openThermos.length > 0
+                          ? 'läuft schon'
+                          : null;
               return (
                 <li key={p.id} className="shop-item">
                   <span className="shop-icon">{p.icon}</span>
@@ -201,7 +263,12 @@ export function SeekerView(props: ViewProps) {
 
       {tab === 'clues' && <Feed items={d.feed} photos={snap.photos} team="seeker" empty="Noch keine Hinweise. Kauft Power-ups oder wartet auf die Challenges der Verstecker." />}
       {tab === 'riddle' && <RiddleCard client={client} d={d} now={now} />}
-      {tab === 'team' && <PlayerList {...props} />}
+      {tab === 'team' && (
+        <>
+          <ChatPanel client={client} snap={snap} d={d} team="seeker" />
+          <PlayerList {...props} />
+        </>
+      )}
 
       {seeking && (
         <ConfirmButton
@@ -211,7 +278,9 @@ export function SeekerView(props: ViewProps) {
             const dist = d.spot && position ? Math.round(distanceMeters(position, d.spot.fix)) : 999_999;
             const acc = position ? Math.round(position.accuracy) : undefined;
             client.addAction({ kind: 'found', dist, lat: position?.lat ?? 0, lng: position?.lng ?? 0, ...(acc !== undefined ? { acc } : {}) });
-            onToast(atSpot({ dist, acc }) ? 'Gefunden! 🎉' : 'Gemeldet – die Verstecker müssen bestätigen.');
+            const ok = atSpot({ dist, acc });
+            play(ok ? 'win' : 'chat');
+            onToast(ok ? 'Gefunden! 🎉' : 'Gemeldet – die Verstecker müssen bestätigen.');
           }}
         >
           🎯 Gefunden!
@@ -246,7 +315,13 @@ function SpotCard({ client, d, now, position, onShowPoint, onToast, onPickSpot }
       const fix = { lat: p.lat, lng: p.lng, acc: Math.round(p.accuracy), t: client.now() };
       const { spotFacts } = await import('../../game/facts');
       const facts = await spotFacts(fix);
+      if (!inField(d.field, facts.canton)) {
+        play('wrong');
+        onToast(`Ausserhalb des Spielfelds (${facts.cantonName ?? facts.canton}). Erlaubt: ${d.field!.join(', ')}.`);
+        return;
+      }
       client.logSpot(fix, facts);
+      play('pick');
       onToast('Versteck eingeloggt 🏠');
     } finally {
       setBusy(null);
@@ -327,6 +402,7 @@ function SpotCard({ client, d, now, position, onShowPoint, onToast, onPickSpot }
         Geht an euren Versteck-Ort und loggt ihn hier ein. Danach könnt ihr ihn nicht mehr ändern. Ohne Login nimmt die App am Ende
         der Versteckzeit euren aktuellen Standort.
       </p>
+      {d.field && <p className="small field-note">🗺️ Spielfeld: nur {d.field.join(', ')}</p>}
       {position ? <GpsBadge accuracy={best.current && busy ? best.current.accuracy : position.accuracy} /> : <span className="gps-badge bad">Noch kein GPS-Signal</span>}
       {(!position || position.accuracy > 150) && <GpsHint platform={platform} />}
       <div className={`spot-actions ${!position || position.accuracy > 150 ? 'map-first' : ''}`}>
@@ -356,6 +432,19 @@ function ChallengeCard({ c, client, now, onToast }: { c: ChallengeState; client:
     client.addAction(a);
     onToast('Challenge erledigt ✅');
   };
+  if (c.skipped) {
+    return (
+      <div className="challenge-card skipped">
+        <div className="challenge-head">
+          <span className="challenge-icon">🎩</span>
+          <div>
+            <small>Challenge #{c.n} · Tarnkappe</small>
+            <strong>Diese Challenge fällt aus – ihr müsst nichts tun.</strong>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={`challenge-card ${def.quiz ? 'quiz' : 'clue'}`}>
       <div className="challenge-head">
@@ -416,6 +505,7 @@ export function HiderView(props: ViewProps) {
   const openRequests = d.photoRequests.filter((r) => !r.answer && !r.missed);
   const current = d.current;
   const nextChallengeAt = current ? current.deadline : null;
+  const unread = useUnreadChat(snap, d, 'hider', tab === 'team');
 
   return (
     <>
@@ -436,10 +526,10 @@ export function HiderView(props: ViewProps) {
         value={tab}
         onChange={setTab}
         options={[
-          { id: 'challenge', label: 'Challenge', badge: (current && !current.done ? 1 : 0) + openRequests.length },
+          { id: 'challenge', label: 'Challenge', badge: (current && !current.done && !current.skipped ? 1 : 0) + openRequests.length },
           { id: 'traps', label: 'Fallen' },
           { id: 'clues', label: 'Hinweise' },
-          { id: 'team', label: 'Team' },
+          { id: 'team', label: 'Team', badge: unread },
         ]}
       />
 
@@ -474,10 +564,10 @@ export function HiderView(props: ViewProps) {
                   .slice(0, -1)
                   .reverse()
                   .map((c) => (
-                    <li key={c.n} className={c.done ? 'good' : 'bad'}>
-                      <span>{c.def?.icon ?? '•'}</span>
+                    <li key={c.n} className={c.done || c.skipped ? 'good' : 'bad'}>
+                      <span>{c.skipped ? '🎩' : (c.def?.icon ?? '•')}</span>
                       <span>{c.def?.title ?? `Challenge ${c.n}`}</span>
-                      <strong>{c.done ? `+${c.reward} P` : 'verpasst'}</strong>
+                      <strong>{c.done ? `+${c.reward} P` : c.skipped ? 'übersprungen' : 'verpasst'}</strong>
                     </li>
                   ))}
               </ul>
@@ -504,6 +594,8 @@ export function HiderView(props: ViewProps) {
                     confirm={`Stellen? ${t.cost} P`}
                     onConfirm={() => {
                       client.addAction({ kind: 'trap', type: t.id, cost: t.cost });
+                      play('trap');
+                      buzz(80);
                       onToast(`${t.icon} Falle gestellt!`);
                     }}
                   >
@@ -513,13 +605,15 @@ export function HiderView(props: ViewProps) {
               );
             })}
           </ul>
-          {(d.jammedUntil || d.inflationUntil || d.fogArmed > 0) && (
+          {(d.jammedUntil || d.inflationUntil || d.frozenUntil || d.fogArmed > 0 || d.cloaksArmed > 0) && (
             <div className="info-banner">
               Aktiv:{' '}
               {[
                 d.jammedUntil && `Funkstille bis ${formatTimeOfDay(d.jammedUntil)}`,
                 d.inflationUntil && `Preiserhöhung bis ${formatTimeOfDay(d.inflationUntil)}`,
+                d.frozenUntil && `Stopp für die Fänger bis ${formatTimeOfDay(d.frozenUntil)}`,
                 d.fogArmed > 0 && 'Nebel wartet auf das nächste Power-up',
+                d.cloaksArmed > 0 && 'Tarnkappe für die nächste Challenge',
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -529,7 +623,12 @@ export function HiderView(props: ViewProps) {
       )}
 
       {tab === 'clues' && <Feed items={d.feed} photos={snap.photos} team="hider" empty="Noch nichts passiert. Hier seht ihr, was die Fänger über euch wissen." />}
-      {tab === 'team' && <PlayerList {...props} />}
+      {tab === 'team' && (
+        <>
+          <ChatPanel client={client} snap={snap} d={d} team="hider" />
+          <PlayerList {...props} />
+        </>
+      )}
     </>
   );
 }

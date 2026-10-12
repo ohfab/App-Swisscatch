@@ -219,10 +219,10 @@ interface RawBoardEntry {
   '*L'?: string;
 }
 
-export async function stationboard(stationId: string, signal?: AbortSignal): Promise<Departure[]> {
+export async function stationboard(stationId: string, signal?: AbortSignal, limit = 10): Promise<Departure[]> {
   const data = await getJson<{ connections?: RawBoardEntry[] }>(
     'stationboard.json',
-    { stop: stationId, limit: '10', show_delays: '1', show_tracks: '1', mode: 'depart' },
+    { stop: stationId, limit: String(limit), show_delays: '1', show_tracks: '1', mode: 'depart' },
     signal,
   );
   return (data.connections ?? []).map((c) => {

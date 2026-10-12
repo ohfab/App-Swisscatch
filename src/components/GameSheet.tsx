@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { CopyIcon, DownloadIcon, FlagIcon, LocateIcon, ShareIcon, UsersIcon } from './Icons';
 import type { GeoStatus, Position } from '../hooks/useGeolocation';
@@ -10,7 +10,10 @@ import type { GameMeta, GameSettings } from '../game/types';
 import type { GameSnapshot } from '../game/client';
 import { distanceMeters, formatDistance, formatNumber } from '../lib/geo';
 import { normalizeCode, CODE_LENGTH } from '../game/crypto';
-import { Avatar, TEAM_ICON, TEAM_LABEL } from './game/common';
+import { Avatar, TEAM_ICON, TEAM_LABEL, useCantonProps } from './game/common';
+import { ChatPanel } from './game/Chat';
+import { REGIONS } from '../game/content';
+import { setSoundOn, soundOn, subscribeSound } from '../lib/sound';
 import { HiderView, SeekerView } from './game/TeamViews';
 import { Blob } from './Art';
 
@@ -154,7 +157,56 @@ function SettingsView({ meta, editable, onChange }: { meta: GameMeta; editable: 
   );
 }
 
-function LobbyView({ game, snap, position, now, onToast }: { game: GameApi; snap: GameSnapshot; position: Position | null; now: number; onToast: Props['onToast'] }) {
+/** Spielfeld: ganze Schweiz oder ausgewählte Kantone (Host wählt) */
+function FieldView({ meta, editable, onChange }: { meta: GameMeta; editable: boolean; onChange: (abbrs: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const cantons = useCantonProps();
+  const field = meta.field ?? [];
+  const toggle = (abbr: string) => onChange(field.includes(abbr) ? field.filter((x) => x !== abbr) : [...field, abbr]);
+  const toggleRegion = (list: string[]) => {
+    const all = list.every((c) => field.includes(c));
+    onChange(all ? field.filter((c) => !list.includes(c)) : [...new Set([...field, ...list])]);
+  };
+  return (
+    <div className="field-box">
+      <strong>🗺️ {field.length ? `${field.length} ${field.length === 1 ? 'Kanton' : 'Kantone'}: ${field.join(', ')}` : 'Ganze Schweiz'}</strong>
+      <small>{field.length ? 'Verstecken ist nur hier erlaubt. Der Rest der Karte ist abgedunkelt.' : 'Versteckt euch irgendwo in der Schweiz.'}</small>
+      {editable && (
+        <>
+          <button className="link small" onClick={() => setOpen(!open)}>
+            {open ? 'Fertig' : 'Spielfeld ändern'}
+          </button>
+          {open && (
+            <>
+              <div className="field-chips">
+                <button className={`chip ${field.length ? '' : 'active'}`} onClick={() => onChange([])}>
+                  Ganze Schweiz
+                </button>
+                {REGIONS.map((r) => (
+                  <button key={r.name} className={`chip ${r.cantons.every((c) => field.includes(c)) ? 'active' : ''}`} onClick={() => toggleRegion(r.cantons)}>
+                    {r.name}
+                  </button>
+                ))}
+              </div>
+              <div className="field-chips cantons">
+                {(cantons ?? [])
+                  .slice()
+                  .sort((a, b) => a.abbr.localeCompare(b.abbr))
+                  .map((c) => (
+                    <button key={c.abbr} className={`chip ${field.includes(c.abbr) ? 'active' : ''}`} title={c.name} onClick={() => toggle(c.abbr)}>
+                      {c.abbr}
+                    </button>
+                  ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function LobbyView({ game, snap, d, position, now, onToast }: { game: GameApi; snap: GameSnapshot; d: Derived; position: Position | null; now: number; onToast: Props['onToast'] }) {
   const c = game.client!;
   const meta = snap.meta!;
   const host = meta.hostId === snap.me.id;
@@ -232,6 +284,11 @@ function LobbyView({ game, snap, position, now, onToast }: { game: GameApi; snap
 
       <h3 className="section-title">Regeln {host ? '' : '(legt der Host fest)'}</h3>
       <SettingsView meta={meta} editable={host} onChange={(p) => c.updateSettings(p)} />
+
+      <h3 className="section-title">Spielfeld</h3>
+      <FieldView meta={meta} editable={host} onChange={(abbrs) => c.updateField(abbrs)} />
+
+      <ChatPanel client={c} snap={snap} d={d} team={null} title="Lobby-Chat" />
 
       {host ? (
         <div className="draw-actions">
@@ -338,6 +395,7 @@ function ResultView({ game, snap, d, onShowPoint }: { game: GameApi; snap: GameS
 
 export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onStartGps, onShowPoint, onToast, onOpenApp, onPickSpot, onClose }: Props) {
   const { installed, canPrompt, ios, install } = useInstallPrompt();
+  const sound = useSyncExternalStore(subscribeSound, soundOn);
   const snap = game.snapshot;
   const meta = snap?.meta ?? null;
   const inGame = !!game.session;
@@ -351,7 +409,18 @@ export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onSt
       : 'Das grosse Versteckspiel mit Freunden';
 
   return (
-    <BottomSheet title={title} subtitle={subtitle} label="Spiel" onClose={onClose} scrollKey={stage}>
+    <BottomSheet
+      title={title}
+      subtitle={subtitle}
+      label="Spiel"
+      onClose={onClose}
+      scrollKey={stage}
+      headerAction={
+        <button className="icon-btn subtle sound-btn" aria-label={sound ? 'Töne ausschalten' : 'Töne einschalten'} title={sound ? 'Töne aus' : 'Töne an'} onClick={() => setSoundOn(!sound)}>
+          {sound ? '🔊' : '🔇'}
+        </button>
+      }
+    >
       {inGame && geoStatus !== 'active' && (
         <div className="gps-warning">
           <span>
@@ -402,7 +471,7 @@ export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onSt
       {snap && meta && game.client && d && (
         <>
           {snap.conn !== 'online' && <div className="banner inline-banner">Verbindung unterbrochen – wird neu aufgebaut …</div>}
-          {stage === 'lobby' && <LobbyView game={game} snap={snap} position={position} now={now} onToast={onToast} />}
+          {stage === 'lobby' && d && <LobbyView game={game} snap={snap} d={d} position={position} now={now} onToast={onToast} />}
           {(stage === 'draw' || stage === 'versus') && <p className="muted route-note">Die Auslosung läuft …</p>}
           {(stage === 'hiding' || stage === 'seeking') &&
             (d.teamOf(snap.me.id) === 'seeker' ? (

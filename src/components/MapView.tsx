@@ -42,6 +42,9 @@ const WORLD: L.LatLngTuple[] = [
 ];
 const AREA_STYLE: L.PolylineOptions = { pane: 'gameMask', interactive: false, stroke: false, fillColor: '#1f1c35', fillOpacity: 0.5 };
 const EDGE_STYLE: L.PolylineOptions = { pane: 'gameMask', interactive: false, color: '#f2914f', weight: 3.5, opacity: 1, dashArray: '10 7', lineCap: 'round', fill: false };
+/** Spielfeld: Kantone ausserhalb leicht abgedunkelt, Rand weiss */
+const FIELD_STYLE: L.PolylineOptions = { pane: 'gameMask', interactive: false, stroke: false, fillColor: '#1f1c35', fillOpacity: 0.38 };
+const FIELD_EDGE: L.PolylineOptions = { pane: 'gameMask', interactive: false, color: '#ffffff', weight: 2.5, opacity: 0.9, fill: false };
 
 export interface GamePlayerMarker {
   id: string;
@@ -497,6 +500,41 @@ export function MapView(props: MapViewProps) {
         L.polygon(rect, AREA_STYLE).addTo(group);
         const line: L.LatLngTuple[] = a.axis === 'ns' ? [[a.lat, w0], [a.lat, e0]] : [[s0, a.lng], [n0, a.lng]];
         L.polyline(line, EDGE_STYLE).addTo(group);
+      } else if (a.kind === 'bisector') {
+        // Mittelsenkrechte zwischen Start und Messung (lokal flach gerechnet)
+        const k = Math.cos((((a.a.lat + a.b.lat) / 2) * Math.PI) / 180);
+        const [ax, ay, bx, by] = [a.a.lng * k, a.a.lat, a.b.lng * k, a.b.lat];
+        const len = Math.hypot(bx - ax, by - ay) || 1;
+        const [dx, dy] = [(bx - ax) / len, (by - ay) / len];
+        const [mx, my] = [(ax + bx) / 2, (ay + by) / 2];
+        const [px, py] = [-dy, dx];
+        // Ausgeschlossen ist die Seite weg vom näheren Punkt
+        const [sx, sy] = a.closer === 'b' ? [-dx, -dy] : [dx, dy];
+        const big = 12;
+        const pts: [number, number][] = [
+          [mx + px * big, my + py * big],
+          [mx - px * big, my - py * big],
+          [mx - px * big + sx * big, my - py * big + sy * big],
+          [mx + px * big + sx * big, my + py * big + sy * big],
+        ];
+        const ll = pts.map(([x, y]) => [y, x / k] as L.LatLngTuple);
+        L.polygon(ll, AREA_STYLE).addTo(group);
+        L.polyline([ll[0]!, ll[1]!], EDGE_STYLE).addTo(group);
+      } else if (a.kind === 'cantons') {
+        loadCantons()
+          .then((data) => {
+            if (cancelled) return;
+            const holes: L.LatLngTuple[][] = [];
+            for (const f of data.features) {
+              if (!a.abbrs.includes(f.properties.abbr)) continue;
+              const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+              for (const rings of polys) holes.push(rings[0]!.map(([lng, lat]) => [lat!, lng!] as L.LatLngTuple));
+            }
+            if (!holes.length) return;
+            L.polygon([WORLD, ...holes], FIELD_STYLE).addTo(group);
+            for (const h of holes) L.polygon([h], FIELD_EDGE).addTo(group);
+          })
+          .catch(() => undefined);
       } else if (a.kind === 'canton') {
         loadCantons()
           .then((data) => {

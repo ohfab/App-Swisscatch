@@ -1333,3 +1333,192 @@
   color: var(--fg);
   box-shadow: inset 0 0 0 var(--bw) var(--stroke);
 }
+
+/* ---------- Team-Chat ---------- */
+
+.chat-list {
+  list-style: none;
+  margin: 0;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: var(--r-card);
+  border: var(--bw) solid var(--stroke);
+  background: var(--surface-2);
+}
+
+.chat-empty {
+  padding: 14px 6px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 14px;
+}
+
+.chat-msg {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  animation: feed-in 0.4s var(--spring);
+}
+
+.chat-msg.mine {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  display: flex;
+  flex-direction: column;
+  max-width: 78%;
+  padding: 7px 12px 6px;
+  border-radius: 18px 18px 18px 6px;
+  border: 1.5px solid var(--stroke);
+  background: var(--surface);
+  font-size: 14.5px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.chat-msg.mine .chat-bubble {
+  border-radius: 18px 18px 6px 18px;
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+.chat-bubble small {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--peach-strong);
+}
+
+.chat-bubble time {
+  align-self: flex-end;
+  margin-top: 2px;
+  font-size: 10.5px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-quick {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chat-quick .chip {
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+
+.chat-form {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-form input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 16px;
+  border: var(--bw) solid var(--stroke);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.chat-form input:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(249, 176, 126, 0.55);
+}
+
+.chat-form .wide-btn {
+  width: auto;
+  height: 46px;
+  margin: 0;
+  padding: 0 18px;
+}
+
+/* ---------- Thermometer, Stopp, Tarnkappe ---------- */
+
+.thermo-bar {
+  height: 12px;
+  margin: 12px 0 10px;
+  border-radius: 999px;
+  border: var(--bw) solid var(--stroke);
+  background: linear-gradient(90deg, #8ec5ff, #fff 50%, #ff9a7a);
+  overflow: hidden;
+}
+
+.thermo-bar span {
+  display: block;
+  height: 100%;
+  border-right: 3px solid var(--ink);
+  background: rgba(31, 28, 53, 0.18);
+  transition: width 0.6s var(--smooth);
+}
+
+.challenge-card.thermo .wide-btn {
+  margin-top: 0;
+}
+
+.freeze-banner {
+  margin: 12px 0 0;
+  font-size: 14px;
+  animation: urgent 1.6s ease-in-out infinite;
+}
+
+.challenge-card.skipped {
+  border-style: dashed;
+  background: var(--surface-2);
+}
+
+.field-note {
+  margin: 8px 0 0;
+  font-weight: 700;
+}
+
+/* ---------- Spielfeld im Lobby-Menü ---------- */
+
+.field-box {
+  padding: 12px 14px;
+  border-radius: var(--r-card);
+  border: var(--bw) solid var(--stroke);
+  background: var(--surface);
+}
+
+.field-box > strong {
+  display: block;
+  font-weight: 800;
+}
+
+.field-box > small {
+  color: var(--muted);
+}
+
+.field-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.field-chips .chip {
+  padding: 5px 10px;
+  font-size: 12.5px;
+}
+
+.field-chips.cantons .chip {
+  min-width: 46px;
+  justify-content: center;
+}
+
+.sound-btn {
+  font-size: 17px;
+}

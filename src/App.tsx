@@ -15,7 +15,11 @@ import { formatClock, isOnline } from './game/rules';
 import { derive } from './game/derive';
 import { DrawShow } from './components/game/DrawShow';
 import { ConfirmButton, TEAM_ICON, TEAM_LABEL, useCantonProps } from './components/game/common';
-import { manualSpotRadius } from './game/content';
+import { inField, manualSpotRadius } from './game/content';
+import { buzz, play } from './lib/sound';
+import { Onboarding } from './components/Onboarding';
+import { load, save } from './lib/storage';
+import type { Area } from './game/derive';
 import { useInstallPrompt } from './hooks/useInstallPrompt';
 import { useNow } from './hooks/useNow';
 import type { GamePlayerMarker } from './components/MapView';
@@ -90,6 +94,8 @@ export function App() {
   const online = useOnline();
   const game = useGame(geo.position);
   const [inviteCode] = useState(() => takeInviteCode() ?? '');
+  // Einführung beim ersten Start (nicht, wenn jemand über einen Einladungs- oder Download-Link kommt)
+  const [onboarding, setOnboarding] = useState(() => !load<boolean>('onboarded.v1', false) && !inviteCode && !new URL(location.href).searchParams.has('app'));
   const gameMeta = game.snapshot?.meta ?? null;
   // Spieluhr: eigene Uhr plus Versatz zur Uhr des Hosts (alle Geräte gleichzeitig)
   const clockOffset = game.snapshot?.clockOffset ?? 0;
@@ -113,10 +119,12 @@ export function App() {
     if (game.session && geo.status === 'off') geo.start();
   }, [game.session, geo.status, geo.start]);
 
-  // Spielmeldungen als Hinweis anzeigen
+  // Spielmeldungen als Hinweis anzeigen (mit Ton)
   const notice = game.snapshot?.notice;
   useEffect(() => {
-    if (notice) setToast(notice.text);
+    if (!notice) return;
+    setToast(notice.text);
+    if (notice.sound) play(notice.sound);
   }, [notice]);
 
   const cantonList = useCantonProps();
@@ -141,13 +149,19 @@ export function App() {
   const stageNow = gameDerived?.stage;
   const challengeNo = gameDerived?.current?.n;
   useEffect(() => {
-    if (stageNow === 'seeking') setToast(myGameTeam === 'seeker' ? '🔍 Die Suche beginnt! Power-ups sind freigeschaltet.' : '🫣 Die Suche beginnt – jetzt gut versteckt bleiben!');
+    if (stageNow === 'seeking') {
+      setToast(myGameTeam === 'seeker' ? '🔍 Die Suche beginnt! Power-ups sind freigeschaltet.' : '🫣 Die Suche beginnt – jetzt gut versteckt bleiben!');
+      play('go');
+      buzz([150, 80, 150]);
+    }
+    if (stageNow === 'ended' && gameDerived?.result?.winner && myGameTeam) play(gameDerived.result.winner === myGameTeam ? 'win' : 'lose');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stageNow]);
   useEffect(() => {
-    if (myGameTeam === 'hider' && challengeNo) {
+    if (myGameTeam === 'hider' && challengeNo && !gameDerived?.current?.skipped) {
       setToast(`🎯 Neue Challenge #${challengeNo}!`);
-      navigator.vibrate?.(200);
+      play('challenge');
+      buzz(200);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [challengeNo]);
@@ -172,7 +186,16 @@ export function App() {
         online: isOnline(p, now),
       }));
   }, [game.snapshot, gameDerived, myGameTeam]);
-  const gameAreas = myGameTeam === 'seeker' && gameDerived && gameDerived.stage !== 'lobby' ? gameDerived.areas : [];
+  // Spielfeld für alle, ausgeschlossene Gebiete nur für die Fänger; nur neu zeichnen, wenn sich etwas ändert
+  const areasList: Area[] = gameDerived
+    ? [
+        ...(gameDerived.field ? [{ kind: 'cantons' as const, abbrs: gameDerived.field }] : []),
+        ...(myGameTeam === 'seeker' && gameDerived.stage !== 'lobby' ? gameDerived.areas : []),
+      ]
+    : [];
+  const areasKey = JSON.stringify(areasList);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const gameAreas = useMemo(() => areasList, [areasKey]);
   const gameSpot =
     gameDerived?.spot && (myGameTeam === 'hider' || gameDerived.stage === 'ended') ? { lat: gameDerived.spot.fix.lat, lng: gameDerived.spot.fix.lng } : null;
   const installPrompt = useInstallPrompt();
@@ -276,14 +299,21 @@ export function App() {
       const at = { lat: pickCenter.lat, lng: pickCenter.lng };
       const { spotFacts } = await import('./game/facts');
       const facts = await spotFacts(at);
+      const field = gameDerived?.field;
+      if (!inField(field, facts.canton)) {
+        play('wrong');
+        setToast(`Ausserhalb des Spielfelds (${facts.cantonName ?? facts.canton}). Erlaubt: ${field!.join(', ')}.`);
+        return;
+      }
       client.logSpot({ ...at, acc: 0, t: client.now() }, facts, { manual: true });
+      play('pick');
       setToast('Versteck eingeloggt 🏠');
       setSpotPick(null);
       setPanel({ type: 'game' });
     } finally {
       setPickBusy(false);
     }
-  }, [game.client, pickCenter]);
+  }, [game.client, pickCenter, gameDerived?.field]);
 
   const handleTap = useCallback(
     (p: LatLng, canton: CantonFeature | null) => {
@@ -664,6 +694,15 @@ export function App() {
 
       <TabBar active={activeTab} pinCount={pins.length} onSelect={selectTab} />
       <Toast message={toast} onDone={() => setToast(null)} />
+      {onboarding && (
+        <Onboarding
+          onDone={() => {
+            setOnboarding(false);
+            save('onboarded.v1', true);
+          }}
+          onOpenApp={() => setPanel({ type: 'app' })}
+        />
+      )}
     </div>
   );
 }

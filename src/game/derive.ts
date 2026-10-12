@@ -35,7 +35,25 @@ export interface ChallengeState {
   inHiding: boolean;
   done: Act<'challenge'> | null;
   missed: boolean;
+  /** Durch die Falle «Tarnkappe» übersprungen */
+  skipped: boolean;
   reward: number;
+}
+
+export interface ThermoState {
+  id: string;
+  by: string;
+  t: number;
+  start: { lat: number; lng: number };
+  measure: Act<'thermo'> | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  by: string;
+  t: number;
+  text: string;
+  audience: 'all' | Team;
 }
 
 export interface PhotoRequest {
@@ -62,7 +80,11 @@ export interface FeedItem {
 export type Area =
   | { kind: 'circle'; lat: number; lng: number; km: number; inside: boolean }
   | { kind: 'half'; axis: 'ns' | 'ew'; side: 'north' | 'south' | 'east' | 'west'; lat: number; lng: number }
-  | { kind: 'canton'; abbr: string };
+  | { kind: 'canton'; abbr: string }
+  /** Thermometer: Mittelsenkrechte zwischen a (Start) und b (Messung); das Versteck liegt näher bei `closer` */
+  | { kind: 'bisector'; a: { lat: number; lng: number }; b: { lat: number; lng: number }; closer: 'a' | 'b' }
+  /** Spielfeld: nur diese Kantone sind erlaubt */
+  | { kind: 'cantons'; abbrs: string[] };
 
 export interface Result {
   winner: Team | null;
@@ -90,7 +112,14 @@ export interface Derived {
   priceFactor: number;
   jammedUntil: number | null;
   inflationUntil: number | null;
+  frozenUntil: number | null;
   fogArmed: number;
+  /** Tarnkappen, die noch auf die nächste Challenge warten */
+  cloaksArmed: number;
+  thermos: ThermoState[];
+  chat: ChatMessage[];
+  /** Spielfeld (Kantonskürzel) oder null für die ganze Schweiz */
+  field: string[] | null;
   challenges: ChallengeState[];
   current: ChallengeState | null;
   photoRequests: PhotoRequest[];
@@ -127,6 +156,18 @@ export function describeResult(r: PowerUpResult): string {
       return `Kanton ${r.name} (${r.abbr}).`;
     case 'photo':
       return 'Foto angefordert.';
+    case 'higher':
+      return r.higher ? `Höher als du (du bist auf ${r.mine} m ü. M.).` : `Tiefer als du (du bist auf ${r.mine} m ü. M.).`;
+    case 'water':
+      return r.near ? 'Ja – ein See oder grosser Fluss ist im Umkreis von 1 km.' : 'Nein – kein See und kein grosser Fluss im Umkreis von 1 km.';
+    case 'letter':
+      return r.firstHalf ? 'Der Gemeindename beginnt mit A–M.' : 'Der Gemeindename beginnt mit N–Z.';
+    case 'thermo-start':
+      return 'Thermometer gestartet – geht mindestens 1 km weit und messt dann.';
+    case 'line':
+      return r.shared.length
+        ? `Ja – ${r.shared.slice(0, 3).join(', ')} ${r.shared.length === 1 ? 'hält' : 'halten'} auch beim Versteck (ab ${r.station}).`
+        : `Nein – keine Linie von ${r.station} hält beim Versteck.`;
     default:
       return 'Unbekannt – die Punkte gibt es zurück.';
   }
@@ -179,7 +220,7 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
 
   // ---------- Fallen ----------
   const traps = of('trap').filter((a) => teamOf(a.by) === 'hider');
-  const activeUntil = (id: 'jam' | 'inflation', at: number) => {
+  const activeUntil = (id: 'jam' | 'inflation' | 'freeze', at: number) => {
     const t = traps.filter((x) => x.type === id && x.t <= at && at < x.t + (trap(id).durationMin ?? 0) * MIN).pop();
     return t ? t.t + (trap(id).durationMin ?? 0) * MIN : null;
   };
@@ -211,6 +252,7 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
 
   // ---------- Challenges ----------
   const every = s.challengeEveryMin * MIN;
+  const cloakQueue = traps.filter((x) => x.type === 'cloak').map((x) => x.t);
   const challengeActs = of('challenge').filter((a) => teamOf(a.by) === 'hider');
   const challenges: ChallengeState[] = [];
   if (Number.isFinite(hideStart) && draw) {
@@ -222,16 +264,40 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
       const def = cantons ? challengeFor(draw.seed, n, inHiding, seekMin, cantons) : null;
       const done = challengeActs.find((a) => a.n === n) ?? null;
       const deadline = start + every;
+      // Tarnkappe: die nächste Challenge nach dem Stellen der Falle fällt aus
+      const skipped = !done && cloakQueue.length > 0 && cloakQueue[0]! < start;
+      if (skipped) cloakQueue.shift();
       let reward = 0;
       if (done) {
         if (done.answer.kind === 'photo') reward = REWARD.photo;
         else if (done.answer.kind === 'choice' && def?.quiz) reward = done.answer.correct ? REWARD.quizCorrect : REWARD.quizWrong;
         else reward = REWARD.clue;
       }
-      challenges.push({ n, def, start, deadline, inHiding, done, missed: !done && endT > deadline, reward });
+      challenges.push({ n, def, start, deadline, inHiding, done, missed: !done && !skipped && endT > deadline, skipped, reward });
     }
   }
   const current = stage === 'hiding' || stage === 'seeking' ? (challenges[challenges.length - 1] ?? null) : null;
+  const cloaksArmed = cloakQueue.length;
+
+  // ---------- Thermometer ----------
+  const thermoActs = of('thermo').filter((a) => teamOf(a.by) === 'seeker');
+  const thermos: ThermoState[] = powerups
+    .filter((p) => p.type === 'thermo' && p.result.type === 'thermo-start')
+    .map((p) => {
+      const r = p.result as Extract<PowerUpResult, { type: 'thermo-start' }>;
+      return { id: p.id, by: p.by, t: p.t, start: { lat: r.lat, lng: r.lng }, measure: thermoActs.find((a) => a.powerupId === p.id) ?? null };
+    });
+
+  // ---------- Chat ----------
+  const drawAt = draw?.at ?? Infinity;
+  const chat: ChatMessage[] = of('chat').map((a) => ({
+    id: a.id,
+    by: a.by,
+    t: a.t,
+    text: a.text,
+    // In der Lobby lesen alle mit, danach nur das eigene Team
+    audience: meta.phase === 'lobby' || a.t < drawAt ? 'all' : teamOf(a.by),
+  }));
 
   // ---------- Rätsel der Fänger ----------
   const riddleActs = of('riddle').filter((a) => teamOf(a.by) === 'seeker');
@@ -273,6 +339,10 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
     if (r.type === 'radar') areas.push({ kind: 'circle', lat: r.lat, lng: r.lng, km: r.km, inside: r.inside });
     if (r.type === 'half') areas.push({ kind: 'half', axis: r.axis, side: r.side, lat: r.lat, lng: r.lng });
     if (r.type === 'canton') areas.push({ kind: 'canton', abbr: r.abbr });
+  }
+  for (const th of thermos) {
+    if (!th.measure || (revealAt[th.id] ?? 0) > now) continue;
+    areas.push({ kind: 'bisector', a: th.start, b: { lat: th.measure.lat, lng: th.measure.lng }, closer: th.measure.closer ? 'b' : 'a' });
   }
 
   // ---------- Meldungen ----------
@@ -321,6 +391,22 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
       feed.push({ id: `cm-${c.n}`, t: c.deadline, icon: '⏰', title: 'Challenge verpasst', text: `+${REWARD.missedChallenge} P für die Fänger`, audience: 'all', tone: 'bad' });
     }
   }
+  for (const th of thermos) {
+    if (!th.measure) continue;
+    const fogged = (revealAt[th.id] ?? 0) > now;
+    feed.push({
+      id: th.measure.id,
+      t: th.measure.t,
+      icon: '🌡️',
+      title: `Thermometer · ${name(th.measure.by)}`,
+      text: fogged ? '🌫️ Im Nebel – die Antwort kommt später.' : th.measure.closer ? '🔥 Wärmer! Ihr seid jetzt näher am Versteck.' : '🧊 Kälter! Ihr habt euch vom Versteck entfernt.',
+      audience: 'all',
+      tone: 'info',
+    });
+  }
+  for (const c of challenges) {
+    if (c.skipped) feed.push({ id: `cs-${c.n}`, t: c.start, icon: '🎩', title: 'Challenge fällt aus', text: 'Die Verstecker tragen eine Tarnkappe.', audience: 'all', tone: 'bad' });
+  }
   for (const r of riddleActs) {
     feed.push({ id: r.id, t: r.t, icon: '🧠', title: `Rätsel ${r.correct ? 'gelöst' : 'falsch'} · ${name(r.by)}`, text: r.correct ? `+${REWARD.riddle} P` : 'Keine Punkte', audience: 'seeker', tone: r.correct ? 'good' : 'bad' });
   }
@@ -338,6 +424,7 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
 
   const jammedUntil = activeUntil('jam', now);
   const inflationUntil = activeUntil('inflation', now);
+  const frozenUntil = activeUntil('freeze', now);
 
   return {
     stage,
@@ -356,7 +443,12 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
     priceFactor: priceFactorAt(now),
     jammedUntil,
     inflationUntil,
+    frozenUntil,
     fogArmed,
+    cloaksArmed,
+    thermos,
+    chat,
+    field: meta.field?.length ? meta.field : null,
     challenges,
     current,
     photoRequests,

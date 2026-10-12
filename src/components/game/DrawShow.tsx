@@ -5,6 +5,7 @@ import type { GameMeta, PlayerState } from '../../game/types';
 import { useNow } from '../../hooks/useNow';
 import { Avatar } from './common';
 import { Blob, Drips } from '../Art';
+import { buzz, play } from '../../lib/sound';
 
 const SPIN_MS = 2600;
 const SIZE = 300;
@@ -55,7 +56,13 @@ function Wheel({ ids, players, target, seed, step, sinceStepStart, highlight, id
     if (idle || remaining <= 0) return;
     // Erst im nächsten Frame drehen, damit der Übergang greift
     const raf = requestAnimationFrame(() => requestAnimationFrame(() => setRot(finalRot)));
-    return () => cancelAnimationFrame(raf);
+    // Klackern, das wie das Rad langsamer wird
+    const timers: number[] = [];
+    for (let t = 0, gap = 45; t < remaining - 150; t += gap, gap *= 1.085) timers.push(window.setTimeout(() => play('tick'), t));
+    return () => {
+      cancelAnimationFrame(raf);
+      timers.forEach((x) => window.clearTimeout(x));
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -112,6 +119,12 @@ function DrawStage({ meta, players, now }: { meta: GameMeta; players: Props['pla
   const picked = draw.hiders.slice(0, k + (revealed ? 1 : 0));
   const done = elapsed >= intro + (H - 1) * STEP + SPIN_MS;
   const target = draw.hiders[k]!;
+  // Fanfare, sobald das Rad steht
+  useEffect(() => {
+    if (!revealed) return;
+    play('pick');
+    buzz(60);
+  }, [revealed, k]);
 
   return (
     <div className="draw-stage">
@@ -156,6 +169,14 @@ function VersusStage({ meta, players, meId, now }: { meta: GameMeta; players: Pr
   const toStart = (meta.startedAt ?? now) - now;
   const meHider = draw.hiders.includes(meId);
   const countdown = Math.ceil(toStart / 1000);
+  useEffect(() => play('whoosh'), []);
+  useEffect(() => {
+    if (countdown >= 1 && countdown <= 3) play('count');
+    if (countdown === 0) {
+      play('go');
+      buzz([100, 50, 200]);
+    }
+  }, [countdown]);
   const team = (ids: string[], side: 'seeker' | 'hider') => (
     <ul className="vs-team">
       {ids.map((id, i) => (

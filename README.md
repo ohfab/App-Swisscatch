@@ -62,12 +62,17 @@ Die Hälfte der Gruppe versteckt sich irgendwo in der Schweiz, die andere Hälft
 | Power-up | Frage | Punkte |
 | --- | --- | --- |
 | Höhenmesser | Über oder unter 800 m ü. M.? | 15 |
+| Höher oder tiefer? | Liegt das Versteck höher oder tiefer als du gerade? | 15 |
 | Haltestellen-Check | Nächste ÖV-Haltestelle näher als 300 m? | 15 |
 | Radar 2 km | Versteck im Umkreis von 2 km? | 20 |
 | Einwohner | Gemeinde mit mehr oder weniger als 20'000 Einwohnern? | 20 |
+| See oder Fluss | See oder grosser Fluss im Umkreis von 1 km? | 20 |
+| Anfangsbuchstabe | Beginnt der Gemeindename mit A–M oder N–Z? | 25 |
+| Thermometer | Mindestens 1 km gehen, dann messen: wärmer oder kälter? Die Karte graut die falsche Seite aus | 25 |
 | Radar 10 km | Versteck im Umkreis von 10 km? | 30 |
 | Karte halbieren Nord/Süd oder Ost/West | Die unmögliche Hälfte wird ausgegraut | 30 |
 | Sprachregion | Welche Sprache spricht man am Versteck? | 35 |
+| Gleiche Linie? | Hält eine ÖV-Linie deiner nächsten Haltestelle auch beim Versteck? | 35 |
 | Radar 50 km | Versteck im Umkreis von 50 km? | 40 |
 | Foto anfordern | Verstecker schicken innert 10 Min ein Foto | 45 |
 | Kanton | In welchem Kanton liegt das Versteck? | 90 |
@@ -82,8 +87,18 @@ Die Hälfte der Gruppe versteckt sich irgendwo in der Schweiz, die andere Hälft
 | --- | --- | --- |
 | Preiserhöhung | Power-ups kosten 15 Min lang 50 % mehr | 25 |
 | Nebel | Die nächste Power-up-Antwort kommt erst nach 10 Min | 30 |
+| Tarnkappe | Die nächste Challenge fällt aus, ohne Strafpunkte | 30 |
 | Punkteklau | Die Fänger verlieren sofort 30 Punkte | 35 |
 | Funkstille | Die Fänger können 10 Min lang keine Power-ups kaufen | 40 |
+| Stopp! | Die Fänger müssen 10 Min lang stehen bleiben | 45 |
+
+**Weitere Funktionen**
+
+- **Spielfeld:** Der Host kann das Spiel auf Kantone oder Grossregionen beschränken (z.B. «Espace Mittelland»). Ausserhalb ist die Karte abgedunkelt, und ein Versteck dort lässt sich nicht einloggen.
+- **Chat:** In der Lobby schreiben alle zusammen, im Spiel nur das eigene Team. Dazu gibt es Schnellantworten wie «🚆 Bin im Zug».
+- **Quiz und Rätsel:** Fragen zu Kantonen sowie Schätz- und Vergleichsfragen zu Bergen, Seen, Pässen, Tunneln und Städten.
+- **Töne und Vibration:** Glücksrad, Countdown, Challenges, Fallen und Sieg haben eigene Töne. Sie lassen sich im Spiel-Menü mit 🔊 ausschalten.
+- **Einführung:** Beim ersten Start erklärt Blobi die App in vier kurzen Seiten.
 
 **Fair Play:** Die App vertraut den Spielern. Sie zeigt jedem Team nur seine eigenen Informationen. Die Fänger sehen weder das Versteck noch die Standorte der Verstecker. Das Versteck erscheint erst am Ende der Runde.
 
