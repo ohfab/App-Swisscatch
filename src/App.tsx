@@ -4,6 +4,7 @@ import { MapView } from './components/MapView';
 import { SearchBar } from './components/SearchBar';
 import { TabBar, type Tab } from './components/TabBar';
 import { LayerSheet } from './components/LayerSheet';
+import { AppSheet } from './components/AppSheet';
 import { PlaceSheet } from './components/PlaceSheet';
 import { CantonSheet } from './components/CantonSheet';
 import { PinsSheet } from './components/PinsSheet';
@@ -36,7 +37,8 @@ type Panel =
   | { type: 'canton'; canton: CantonFeature }
   | { type: 'route' }
   | { type: 'pins' }
-  | { type: 'game' };
+  | { type: 'game' }
+  | { type: 'app' };
 
 const DEFAULT_OVERLAYS: Record<OverlayId, boolean> = { cantons: true, transit: false, hiking: false };
 
@@ -90,9 +92,16 @@ export function App() {
   const gameMeta = game.snapshot?.meta ?? null;
   const gameNow = useNow(1000, !!gameMeta);
 
-  // Einladungslink geöffnet: direkt den Spiel-Tab zeigen
+  // Einladungslink geöffnet: direkt den Spiel-Tab zeigen; Download-Link (?app): App-Seite zeigen
   useEffect(() => {
+    const url = new URL(location.href);
+    const wantsApp = url.searchParams.has('app');
+    if (wantsApp) {
+      url.searchParams.delete('app');
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    }
     if (inviteCode && !game.session) setPanel({ type: 'game' });
+    else if (wantsApp) setPanel({ type: 'app' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -401,8 +410,13 @@ export function App() {
       </header>
 
       <div className="fabs">
-        {installPrompt.canPrompt && !installPrompt.installed && (
-          <button className="fab install" aria-label="App installieren" title="Als App installieren" onClick={() => void installPrompt.install()}>
+        {!installPrompt.installed && (
+          <button
+            className={`fab install ${panel?.type === 'app' ? 'active' : ''}`}
+            aria-label="App herunterladen"
+            title="App herunterladen"
+            onClick={() => (panel?.type === 'app' ? closePanel() : setPanel({ type: 'app' }))}
+          >
             <DownloadIcon />
           </button>
         )}
@@ -430,9 +444,11 @@ export function App() {
           overlays={overlays}
           onBasemap={setBasemap}
           onToggleOverlay={(id) => setOverlays((o) => ({ ...DEFAULT_OVERLAYS, ...o, [id]: !overlays[id] }))}
+          onOpenApp={() => setPanel({ type: 'app' })}
           onClose={closePanel}
         />
       )}
+      {panel?.type === 'app' && <AppSheet onClose={closePanel} onToast={setToast} />}
       {panel?.type === 'place' && (
         <PlaceSheet
           key={panel.place.key}
@@ -526,6 +542,7 @@ export function App() {
           }}
           onShowPoint={(lat, lng) => focus({ lat, lng }, 16)}
           onToast={setToast}
+          onOpenApp={() => setPanel({ type: 'app' })}
           onClose={closePanel}
         />
       )}

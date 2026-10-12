@@ -3,7 +3,7 @@
 Eine Karten-App für die ganze Schweiz mit einem **schweizweiten Versteckspiel für Freunde**.
 Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC.
 
-**Live:** https://ohfab.github.io/App-Swisscatch/
+**Live:** https://ohfab.github.io/App-Swisscatch/ · **App herunterladen:** https://ohfab.github.io/App-Swisscatch/download/
 
 <p>
   <img src="docs/screenshots/karte.jpg" width="200" alt="Strassenkarte von Bern">
@@ -95,8 +95,8 @@ Die Hälfte der Gruppe versteckt sich irgendwo in der Schweiz, die andere Hälft
 
 Die App läuft auch im Browser am Computer, die Karte nutzt dann den ganzen Bildschirm, das Menü sitzt links.
 
-1. https://ohfab.github.io/App-Swisscatch/ in Chrome oder Edge öffnen.
-2. Zum Installieren auf das Installieren-Symbol rechts in der Adressleiste klicken oder in der App oben rechts auf den Download-Knopf. In Edge geht es auch über das Menü «Apps → Diese Website als App installieren».
+1. https://ohfab.github.io/App-Swisscatch/download/ in Chrome oder Edge öffnen. Die Seite «App herunterladen» zeigt je nach Gerät den passenden Weg und einen QR-Code fürs Handy.
+2. Auf «Jetzt installieren» klicken, oder auf das Installieren-Symbol rechts in der Adressleiste. In Edge geht es auch über das Menü «Apps → Diese Website als App installieren».
 3. Die App startet danach in einem eigenen Fenster und erscheint im Startmenü bzw. im Dock.
 
 Am PC ist der Standort meist ungenau (WLAN-Ortung). Zum Spielen unterwegs eignet sich deshalb das Handy.

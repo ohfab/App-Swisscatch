@@ -24,6 +24,7 @@ interface Props {
   onStartGps: () => void;
   onShowPoint: (lat: number, lng: number) => void;
   onToast: (msg: string) => void;
+  onOpenApp: () => void;
   onClose: () => void;
 }
 
@@ -334,7 +335,7 @@ function ResultView({ game, snap, d, onShowPoint }: { game: GameApi; snap: GameS
 
 // ---------- Sheet ----------
 
-export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onStartGps, onShowPoint, onToast, onClose }: Props) {
+export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onStartGps, onShowPoint, onToast, onOpenApp, onClose }: Props) {
   const { installed, canPrompt, ios, install } = useInstallPrompt();
   const snap = game.snapshot;
   const meta = snap?.meta ?? null;
@@ -467,9 +468,9 @@ export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onSt
                         : 'Im Browser-Menü «App installieren» wählen'}
                 </small>
               </span>
-              {!installed && canPrompt && (
-                <button className="chip" onClick={install}>
-                  <DownloadIcon size={16} /> Installieren
+              {!installed && (
+                <button className="chip" onClick={canPrompt ? () => void install() : onOpenApp}>
+                  <DownloadIcon size={16} /> {canPrompt ? 'Installieren' : 'Anleitung'}
                 </button>
               )}
             </li>

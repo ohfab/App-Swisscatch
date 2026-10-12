@@ -1,16 +1,17 @@
 import { BASEMAPS, OVERLAYS, type BasemapId, type OverlayId } from '../lib/config';
 import { BottomSheet } from './BottomSheet';
-import { CheckIcon } from './Icons';
+import { CheckIcon, DownloadIcon } from './Icons';
 
 interface Props {
   basemap: BasemapId;
   overlays: Record<OverlayId, boolean>;
   onBasemap: (id: BasemapId) => void;
   onToggleOverlay: (id: OverlayId) => void;
+  onOpenApp: () => void;
   onClose: () => void;
 }
 
-export function LayerSheet({ basemap, overlays, onBasemap, onToggleOverlay, onClose }: Props) {
+export function LayerSheet({ basemap, overlays, onBasemap, onToggleOverlay, onOpenApp, onClose }: Props) {
   return (
     <BottomSheet title="Karte & Ebenen" label="Karte und Ebenen" onClose={onClose}>
       <h3 className="section-title">Grundkarte</h3>
@@ -49,6 +50,9 @@ export function LayerSheet({ basemap, overlays, onBasemap, onToggleOverlay, onCl
           </li>
         ))}
       </ul>
+      <button className="wide-btn secondary layers-app-btn" onClick={onOpenApp}>
+        <DownloadIcon size={18} /> App herunterladen
+      </button>
       <p className="fine-print">
         Karten und Daten: © swisstopo, BAV, BFS. Kacheln, die du einmal angeschaut hast, bleiben offline verfügbar.
       </p>

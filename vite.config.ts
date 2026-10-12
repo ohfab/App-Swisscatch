@@ -5,8 +5,12 @@ import { VitePWA } from 'vite-plugin-pwa';
 // Für GitHub Pages wird BASE_PATH auf "/<repo-name>/" gesetzt.
 const base = process.env.BASE_PATH ?? '/';
 
+// Version für die Download-Seite: Commit (auf GitHub) und Zeitpunkt des Builds
+const version = { sha: (process.env.GITHUB_SHA ?? 'lokal').slice(0, 7), time: new Date().toISOString() };
+
 export default defineConfig({
   base,
+  define: { __APP_VERSION__: JSON.stringify(version) },
   // MapLibre (Strassenkarte) ist gross, wird aber erst bei Bedarf nachgeladen
   build: { chunkSizeWarningLimit: 1100 },
   plugins: [
@@ -17,7 +21,7 @@ export default defineConfig({
       manifest: {
         name: 'SwissCatch – Schweizerkarte',
         short_name: 'SwissCatch',
-        description: 'Interaktive Schweizerkarte – die Basis für das grosse Fangen quer durch die Schweiz.',
+        description: 'Interaktive Schweizerkarte mit ÖV-Fahrplan und dem grossen Versteckspiel quer durch die Schweiz.',
         lang: 'de-CH',
         theme_color: '#1F1C35',
         background_color: '#1F1C35',

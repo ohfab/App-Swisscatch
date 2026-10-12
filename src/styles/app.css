@@ -1,0 +1,196 @@
+/* ---------- App herunterladen ---------- */
+
+.app-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 16px 16px 14px;
+  border-radius: 26px;
+  border: var(--bw) solid var(--ink);
+  background: var(--peach);
+  color: var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  overflow: hidden;
+}
+
+.app-icon {
+  flex: none;
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  border: var(--bw) solid var(--ink);
+  background: #fff;
+  animation: icon-hop 3.2s ease-in-out infinite;
+}
+
+@keyframes icon-hop {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  78% {
+    transform: translateY(-8px) rotate(-6deg);
+  }
+  86% {
+    transform: translateY(0) rotate(3deg);
+  }
+}
+
+.app-hero > div {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding-right: 16px;
+}
+
+.app-hero h3 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.app-hero p {
+  margin: 2px 0 4px;
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 1.3;
+}
+
+.app-hero small {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.app-hero-blob {
+  position: absolute;
+  right: -18px;
+  bottom: -30px;
+  opacity: 0.9;
+  transform: rotate(-12deg);
+}
+
+.install-btn {
+  margin-top: 4px;
+}
+
+.install-btn svg {
+  animation: drop-bounce 1.6s ease-in-out infinite;
+}
+
+@keyframes drop-bounce {
+  0%,
+  100% {
+    transform: translateY(-2px);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+.install-done {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-card);
+  border: var(--bw) solid var(--stroke);
+  background: color-mix(in srgb, var(--green) 10%, var(--surface));
+}
+
+.install-done > svg {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  animation: jelly 0.7s ease;
+}
+
+.install-done div {
+  display: flex;
+  flex-direction: column;
+}
+
+.install-done small {
+  color: var(--muted);
+}
+
+.install-steps {
+  color: var(--fg);
+  font-size: 14.5px;
+}
+
+.install-steps svg {
+  display: inline-block;
+  vertical-align: -2px;
+}
+
+.share-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border-radius: var(--r-card);
+  border: var(--bw) solid var(--stroke);
+  background: var(--surface);
+}
+
+.qr {
+  flex: none;
+  width: 132px;
+  height: 132px;
+  border-radius: 16px;
+  border: 1.5px solid var(--ink);
+  background: #fff;
+  animation: pop-in 0.5s var(--spring);
+}
+
+.qr-loading {
+  background: var(--surface-2);
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+.share-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-text p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 550;
+}
+
+.share-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.app-version {
+  text-align: center;
+}
+
+.layers-app-btn {
+  margin-top: 18px;
+}
