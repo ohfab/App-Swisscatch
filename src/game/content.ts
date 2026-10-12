@@ -99,6 +99,11 @@ export const REWARD = {
 export const RIDDLE_EVERY_MIN = 15;
 /** Ab dieser Distanz zum Versteck gilt «Gefunden!» automatisch */
 export const FOUND_RADIUS_M = 200;
+/** Ungenaues GPS der Fänger wird beim «Gefunden!» bis zu so vielen Metern berücksichtigt */
+export const FOUND_GPS_TOLERANCE_M = 80;
+
+/** Wie weit ein auf der Karte gewähltes Versteck vom GPS-Standort weg sein darf */
+export const manualSpotRadius = (accuracy: number) => Math.max(500, Math.round(accuracy * 1.5 + 200));
 export const PHOTO_DEADLINE_MIN = 10;
 export const FOG_DELAY_MIN = 10;
 

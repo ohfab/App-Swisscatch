@@ -19,9 +19,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'SwissCatch – Schweizerkarte',
-        short_name: 'SwissCatch',
-        description: 'Interaktive Schweizerkarte mit ÖV-Fahrplan und dem grossen Versteckspiel quer durch die Schweiz.',
+        name: 'Spurlos – Versteckspiel und Schweizerkarte',
+        short_name: 'Spurlos',
+        description: 'Das grosse Versteckspiel quer durch die Schweiz – mit Karte und ÖV-Fahrplan.',
         lang: 'de-CH',
         theme_color: '#1F1C35',
         background_color: '#1F1C35',

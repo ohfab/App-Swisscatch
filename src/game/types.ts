@@ -115,13 +115,13 @@ interface Base {
 }
 
 export type Action =
-  | (Base & { kind: 'spot'; fix: Fix; facts: SpotFacts; auto?: boolean })
+  | (Base & { kind: 'spot'; fix: Fix; facts: SpotFacts; auto?: boolean; manual?: boolean })
   | (Base & { kind: 'powerup'; type: PowerUpId; cost: number; result: PowerUpResult })
   | (Base & { kind: 'challenge'; n: number; answer: ChallengeAnswer })
   | (Base & { kind: 'photo-answer'; requestId: string; photoId: string })
   | (Base & { kind: 'riddle'; n: number; value: string; correct: boolean })
   | (Base & { kind: 'trap'; type: TrapId; cost: number })
-  | (Base & { kind: 'found'; dist: number; lat: number; lng: number })
+  | (Base & { kind: 'found'; dist: number; lat: number; lng: number; acc?: number })
   | (Base & { kind: 'confirm-found'; claimId: string });
 
 /** Von jedem Spieler selbst verwaltet, als «retained» Nachricht gespeichert */

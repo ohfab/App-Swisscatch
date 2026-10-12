@@ -2,6 +2,7 @@ import type { CantonProps } from '../lib/cantons';
 import {
   challengeFor,
   FOG_DELAY_MIN,
+  FOUND_GPS_TOLERANCE_M,
   FOUND_RADIUS_M,
   PHOTO_DEADLINE_MIN,
   powerUp,
@@ -102,6 +103,9 @@ export interface Derived {
   revealAt: Record<string, number>;
 }
 
+/** «Gefunden!» gilt automatisch, wenn die Fänger nah genug sind (ungenaues GPS etwas berücksichtigt) */
+export const atSpot = (f: { dist: number; acc?: number }) => f.dist - Math.min(f.acc ?? 0, FOUND_GPS_TOLERANCE_M) <= FOUND_RADIUS_M;
+
 const fmtTime = (t: number) =>
   new Intl.DateTimeFormat('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' }).format(t);
 
@@ -152,8 +156,7 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
   if (meta.phase !== 'lobby' && Number.isFinite(hideStart)) {
     const claims = of('found').filter((a) => teamOf(a.by) === 'seeker' && a.t >= hideEnd);
     const confirmed = of('confirm-found').filter((a) => teamOf(a.by) === 'hider');
-    const success =
-      claims.find((c) => c.dist <= FOUND_RADIUS_M) ?? claims.find((c) => confirmed.some((x) => x.claimId === c.id));
+    const success = claims.find((c) => atSpot(c)) ?? claims.find((c) => confirmed.some((x) => x.claimId === c.id));
     if (success && success.t <= seekEnd) {
       result = { winner: 'seeker', reason: 'found', at: success.t, hiddenMs: Math.max(0, success.t - hideEnd), finder: success.by };
     } else if (now >= seekEnd) {
@@ -275,7 +278,10 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
   // ---------- Meldungen ----------
   const name = (id: string) => players[id]?.name ?? 'Jemand';
   const feed: FeedItem[] = [];
-  if (spot) feed.push({ id: `spot-${spot.id}`, t: spot.t, icon: '🏠', title: 'Versteck eingeloggt', text: spot.auto ? 'Automatisch am Ende der Versteckzeit.' : `von ${name(spot.by)}`, audience: 'all', tone: 'info' });
+  if (spot) {
+    const how = spot.auto ? 'Automatisch am Ende der Versteckzeit.' : spot.manual ? `von ${name(spot.by)} · auf der Karte gewählt` : `von ${name(spot.by)}`;
+    feed.push({ id: `spot-${spot.id}`, t: spot.t, icon: '🏠', title: 'Versteck eingeloggt', text: how, audience: 'all', tone: 'info' });
+  }
   for (const p of powerups) {
     const def = powerUp(p.type);
     const at = revealAt[p.id] ?? p.t;
@@ -323,12 +329,12 @@ export function derive(meta: GameMeta | null, players: Record<string, PlayerStat
     feed.push({ id: x.id, t: x.t, icon: def.icon, title: `Falle: ${def.name}`, text: def.effect, audience: 'all', tone: 'bad' });
   }
   for (const f of of('found')) {
-    feed.push({ id: f.id, t: f.t, icon: '🎯', title: `${name(f.by)} meldet: Gefunden!`, text: f.dist <= FOUND_RADIUS_M ? 'Am Versteck – die Fänger gewinnen!' : 'Wartet auf Bestätigung der Verstecker.', audience: 'all', tone: 'info' });
+    feed.push({ id: f.id, t: f.t, icon: '🎯', title: `${name(f.by)} meldet: Gefunden!`, text: atSpot(f) ? 'Am Versteck – die Fänger gewinnen!' : 'Wartet auf Bestätigung der Verstecker.', audience: 'all', tone: 'info' });
   }
   feed.sort((a, b) => b.t - a.t);
 
   const resolvedClaims = new Set(of('confirm-found').map((c) => c.claimId));
-  const pendingClaims = of('found').filter((f) => f.dist > FOUND_RADIUS_M && !resolvedClaims.has(f.id) && now - f.t < 15 * MIN);
+  const pendingClaims = of('found').filter((f) => !atSpot(f) && !resolvedClaims.has(f.id) && now - f.t < 15 * MIN);
 
   const jammedUntil = activeUntil('jam', now);
   const inflationUntil = activeUntil('inflation', now);

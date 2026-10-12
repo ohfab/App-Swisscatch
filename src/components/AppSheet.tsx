@@ -77,7 +77,7 @@ export function AppSheet({ onClose, onToast }: Props) {
   const version = `${__APP_VERSION__.sha} · ${new Date(__APP_VERSION__.time).toLocaleString('de-CH', { dateStyle: 'medium', timeStyle: 'short' })}`;
 
   const share = async () => {
-    const data = { title: 'SwissCatch', text: 'Hol dir SwissCatch – Schweizerkarte, Fahrplan und Versteckis als App:', url: DOWNLOAD_URL };
+    const data = { title: 'Spurlos', text: 'Hol dir Spurlos – das Versteckspiel quer durch die Schweiz, mit Karte und Fahrplan:', url: DOWNLOAD_URL };
     if (navigator.share) {
       try {
         await navigator.share(data);
@@ -96,7 +96,7 @@ export function AppSheet({ onClose, onToast }: Props) {
         <CheckIcon size={22} />
         <div>
           <strong>Läuft schon als App</strong>
-          <small>Du findest SwissCatch auf dem Home-Bildschirm bzw. im Startmenü.</small>
+          <small>Du findest Spurlos auf dem Home-Bildschirm bzw. im Startmenü.</small>
         </div>
       </div>
     );
@@ -177,8 +177,8 @@ export function AppSheet({ onClose, onToast }: Props) {
       <div className="app-hero">
         <img className="app-icon" src={`${import.meta.env.BASE_URL}icons/icon.svg`} alt="" width={76} height={76} />
         <div>
-          <h3>SwissCatch</h3>
-          <p>Karte, Fahrplan und Versteckis – direkt als App, ohne App Store.</p>
+          <h3>Spurlos</h3>
+          <p>Versteckspiel, Karte und Fahrplan – direkt als App, ohne App Store.</p>
           <small>Gratis · keine Anmeldung · offline nutzbar</small>
         </div>
         <Blob size={58} color="white" className="app-hero-blob" />

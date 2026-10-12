@@ -157,3 +157,58 @@ export function Tabs<T extends string>({ value, options, onChange }: { value: T;
     </div>
   );
 }
+
+// ---------- GPS-Qualität ----------
+
+export type GpsLevel = 'good' | 'ok' | 'weak' | 'bad';
+
+export function gpsLevel(accuracy: number): GpsLevel {
+  if (accuracy <= 25) return 'good';
+  if (accuracy <= 60) return 'ok';
+  if (accuracy <= 200) return 'weak';
+  return 'bad';
+}
+
+const GPS_LABEL: Record<GpsLevel, string> = { good: 'sehr genau', ok: 'genau', weak: 'ungenau', bad: 'sehr ungenau' };
+
+/** Kleine Anzeige «GPS ±12 m · sehr genau» */
+export function GpsBadge({ accuracy }: { accuracy: number }) {
+  const level = gpsLevel(accuracy);
+  const m = accuracy >= 1000 ? `${(accuracy / 1000).toFixed(1)} km` : `${Math.round(accuracy)} m`;
+  return (
+    <span className={`gps-badge ${level}`}>
+      <span className="gps-bars" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      GPS ±{m} · {GPS_LABEL[level]}
+    </span>
+  );
+}
+
+/** Tipps, wenn der Standort ungenau ist – je nach Gerät */
+export function GpsHint({ platform }: { platform: 'ios' | 'android' | 'desktop' }) {
+  return (
+    <div className="info-banner gps-hint">
+      {platform === 'ios' && (
+        <>
+          <strong>Standort ungenau?</strong> Auf dem iPhone: Einstellungen → Datenschutz & Sicherheit → Ortungsdienste → <em>Safari-Websites</em> (bzw.
+          Spurlos) → «Beim Verwenden» und <strong>«Genauer Standort»</strong> einschalten. Kurz ins Freie gehen hilft auch.
+        </>
+      )}
+      {platform === 'android' && (
+        <>
+          <strong>Standort ungenau?</strong> Auf Android: Einstellungen → Standort → Standortdienste → <strong>Google-Standortgenauigkeit</strong>{' '}
+          einschalten und in Chrome den Standort für diese Seite erlauben. Kurz ins Freie gehen hilft auch.
+        </>
+      )}
+      {platform === 'desktop' && (
+        <>
+          <strong>Am PC gibt es kein GPS</strong> – der Browser schätzt den Ort nur grob über WLAN oder Internet. Wähle das Versteck einfach{' '}
+          <strong>auf der Karte</strong>.
+        </>
+      )}
+    </div>
+  );
+}

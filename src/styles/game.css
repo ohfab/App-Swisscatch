@@ -1128,3 +1128,208 @@
 .result-stats {
   margin-top: 10px;
 }
+
+/* ---------- GPS-Qualität ---------- */
+
+.gps-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 4px 11px 4px 9px;
+  border-radius: 999px;
+  border: 1.5px solid var(--stroke);
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.gps-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.gps-bars i {
+  width: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.gps-bars i:nth-child(1) {
+  height: 5px;
+}
+.gps-bars i:nth-child(2) {
+  height: 8px;
+}
+.gps-bars i:nth-child(3) {
+  height: 12px;
+}
+
+.gps-badge.good .gps-bars i,
+.gps-badge.ok .gps-bars i:nth-child(-n + 2),
+.gps-badge.weak .gps-bars i:nth-child(1),
+.gps-badge.bad .gps-bars i:nth-child(1) {
+  background: var(--fg);
+}
+
+.gps-badge.good {
+  background: color-mix(in srgb, var(--green) 14%, var(--surface));
+}
+
+.gps-badge.weak {
+  background: var(--peach-soft);
+}
+
+.gps-badge.bad {
+  background: color-mix(in srgb, var(--red) 12%, var(--surface));
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.gps-badge.bad .gps-bars i:nth-child(1) {
+  background: var(--red);
+}
+
+.gps-hint {
+  margin-top: 10px;
+  line-height: 1.4;
+}
+
+.spot-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.spot-actions .spot-btn {
+  margin-top: 0;
+}
+
+.spot-actions .wide-btn {
+  margin-top: 0;
+}
+
+/* ---------- Versteck auf der Karte wählen ---------- */
+
+.pick-cross {
+  position: absolute;
+  z-index: 1001;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  pointer-events: none;
+}
+
+.pick-cross::before,
+.pick-cross::after {
+  content: '';
+  position: absolute;
+  background: var(--ink);
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.pick-cross::before {
+  left: 26px;
+  top: 0;
+  width: 4px;
+  height: 56px;
+}
+
+.pick-cross::after {
+  top: 26px;
+  left: 0;
+  width: 56px;
+  height: 4px;
+}
+
+.pick-cross span {
+  position: absolute;
+  inset: 16px;
+  z-index: 1;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
+  background: var(--peach);
+  box-shadow: 0 0 0 2px #fff;
+  animation: pick-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pick-pulse {
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+.pick-card {
+  position: absolute;
+  z-index: 1060;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 30px);
+  padding: 14px;
+  border-radius: 26px;
+  border: var(--bw) solid var(--ink);
+  background: var(--surface);
+  box-shadow: 0 5px 0 var(--ink);
+  animation: pop-in 0.45s var(--spring);
+}
+
+.pick-card strong {
+  display: block;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.pick-card p {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.pick-card p.bad {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.pick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pick-actions .wide-btn {
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  .pick-card {
+    left: 50%;
+    right: auto;
+    width: 420px;
+    transform: translateX(-50%);
+    bottom: calc(var(--tabbar-h) + 34px);
+    animation: none;
+  }
+}
+
+/* Ungenaues GPS: «Auf der Karte wählen» zuerst und als Hauptknopf */
+.spot-actions.map-first .wide-btn.secondary {
+  order: -1;
+  background: var(--peach);
+  color: var(--ink);
+  box-shadow:
+    inset 0 0 0 var(--bw) var(--ink),
+    0 4px 0 var(--ink);
+}
+
+.spot-actions.map-first .spot-btn {
+  background: transparent;
+  color: var(--fg);
+  box-shadow: inset 0 0 0 var(--bw) var(--stroke);
+}

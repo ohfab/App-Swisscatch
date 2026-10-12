@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GameClient, GameSnapshot } from '../../game/client';
-import { POWERUPS, TRAPS, REWARD, FOUND_RADIUS_M, type ChallengeDef } from '../../game/content';
-import { priceOf, type ChallengeState, type Derived } from '../../game/derive';
+import { POWERUPS, TRAPS, REWARD, type ChallengeDef } from '../../game/content';
+import { atSpot, priceOf, type ChallengeState, type Derived } from '../../game/derive';
 import { formatAgo, formatClock, formatTimeOfDay, isOnline } from '../../game/rules';
 import type { Team } from '../../game/types';
 import type { Position } from '../../hooks/useGeolocation';
 import { usePersistentState } from '../../hooks/usePersistentState';
+import { useInstallPrompt } from '../../hooks/useInstallPrompt';
 import { distanceMeters, formatDistance, formatNumber } from '../../lib/geo';
-import { Avatar, ConfirmButton, Feed, PhotoButton, Points, Tabs, TEAM_ICON, TEAM_LABEL } from './common';
+import { Avatar, ConfirmButton, Feed, GpsBadge, GpsHint, PhotoButton, Points, Tabs, TEAM_ICON, TEAM_LABEL } from './common';
+
+const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
 interface ViewProps {
   client: GameClient;
@@ -17,6 +20,8 @@ interface ViewProps {
   position: Position | null;
   onShowPoint: (lat: number, lng: number) => void;
   onToast: (msg: string) => void;
+  /** Versteck auf der Karte wählen (bei ungenauem GPS oder am PC) */
+  onPickSpot: () => void;
 }
 
 // ---------- Gemeinsam ----------
@@ -161,6 +166,9 @@ export function SeekerView(props: ViewProps) {
           {jammed && <div className="info-banner bad">📵 Funkstille bis {formatTimeOfDay(d.jammedUntil!)} – keine Power-ups.</div>}
           {d.inflationUntil && <div className="info-banner bad">💸 Preise +50 % bis {formatTimeOfDay(d.inflationUntil)}.</div>}
           {!d.spot && seeking && <div className="info-banner">Die Verstecker haben noch kein Versteck – Antworten sind erst danach möglich.</div>}
+          {position && position.accuracy > 300 && (
+            <div className="info-banner">📡 Dein GPS ist ungenau (±{formatDistance(position.accuracy)}). Radar und «Karte halbieren» rechnen mit diesem ungefähren Standort.</div>
+          )}
           <ul className="shop">
             {POWERUPS.map((p) => {
               const price = priceOf(d, p.cost);
@@ -201,8 +209,9 @@ export function SeekerView(props: ViewProps) {
           confirm="Sicher? Ihr steht beim Versteck?"
           onConfirm={() => {
             const dist = d.spot && position ? Math.round(distanceMeters(position, d.spot.fix)) : 999_999;
-            client.addAction({ kind: 'found', dist, lat: position?.lat ?? 0, lng: position?.lng ?? 0 });
-            onToast(dist <= FOUND_RADIUS_M ? 'Gefunden! 🎉' : 'Gemeldet – die Verstecker müssen bestätigen.');
+            const acc = position ? Math.round(position.accuracy) : undefined;
+            client.addAction({ kind: 'found', dist, lat: position?.lat ?? 0, lng: position?.lng ?? 0, ...(acc !== undefined ? { acc } : {}) });
+            onToast(atSpot({ dist, acc }) ? 'Gefunden! 🎉' : 'Gemeldet – die Verstecker müssen bestätigen.');
           }}
         >
           🎯 Gefunden!
@@ -214,8 +223,36 @@ export function SeekerView(props: ViewProps) {
 
 // ---------- Verstecker ----------
 
-function SpotCard({ client, d, now, position, onShowPoint, onToast }: ViewProps) {
-  const [busy, setBusy] = useState(false);
+function SpotCard({ client, d, now, position, onShowPoint, onToast, onPickSpot }: ViewProps) {
+  const [busy, setBusy] = useState<null | 'measuring' | 'facts'>(null);
+  const { platform } = useInstallPrompt();
+  // Genaueste Messung der letzten 30 Sekunden merken
+  const best = useRef<Position | null>(null);
+  useEffect(() => {
+    if (!position) return;
+    const b = best.current;
+    if (!b || position.accuracy <= b.accuracy || position.timestamp - b.timestamp > 30_000) best.current = position;
+  }, [position]);
+
+  const login = async () => {
+    setBusy('measuring');
+    try {
+      // Bis zu 12 Sekunden auf eine genaue Messung warten
+      const until = Date.now() + 12_000;
+      while ((best.current?.accuracy ?? Infinity) > 30 && Date.now() < until) await sleep(500);
+      const p = best.current;
+      if (!p) return;
+      setBusy('facts');
+      const fix = { lat: p.lat, lng: p.lng, acc: Math.round(p.accuracy), t: client.now() };
+      const { spotFacts } = await import('../../game/facts');
+      const facts = await spotFacts(fix);
+      client.logSpot(fix, facts);
+      onToast('Versteck eingeloggt 🏠');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (d.spot) {
     const f = d.spot.facts;
     return (
@@ -224,7 +261,10 @@ function SpotCard({ client, d, now, position, onShowPoint, onToast }: ViewProps)
           <span>🏠</span>
           <div>
             <strong>Versteck eingeloggt</strong>
-            <small>{formatTimeOfDay(d.spot.t)}{d.spot.auto ? ' · automatisch' : ''}</small>
+            <small>
+              {formatTimeOfDay(d.spot.t)}
+              {d.spot.auto ? ' · automatisch' : d.spot.manual ? ' · auf der Karte gewählt' : ` · GPS ±${Math.round(d.spot.fix.acc)} m`}
+            </small>
           </div>
           <button className="chip" onClick={() => onShowPoint(d.spot!.fix.lat, d.spot!.fix.lng)}>
             Karte
@@ -287,27 +327,22 @@ function SpotCard({ client, d, now, position, onShowPoint, onToast }: ViewProps)
         Geht an euren Versteck-Ort und loggt ihn hier ein. Danach könnt ihr ihn nicht mehr ändern. Ohne Login nimmt die App am Ende
         der Versteckzeit euren aktuellen Standort.
       </p>
-      {position && position.accuracy > 80 && <p className="small warn-text">GPS ist noch ungenau (±{Math.round(position.accuracy)} m).</p>}
-      <ConfirmButton
-        className="spot-btn"
-        disabled={!position || busy}
-        confirm="Endgültig hier einloggen?"
-        onConfirm={async () => {
-          if (!position) return;
-          setBusy(true);
-          const fix = { lat: position.lat, lng: position.lng, acc: Math.round(position.accuracy), t: position.timestamp };
-          try {
-            const { spotFacts } = await import('../../game/facts');
-            const facts = await spotFacts(fix);
-            client.logSpot(fix, facts);
-            onToast('Versteck eingeloggt 🏠');
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {busy ? 'Ermittle Ort …' : position ? '📍 Hier einloggen' : 'Warte auf GPS …'}
-      </ConfirmButton>
+      {position ? <GpsBadge accuracy={best.current && busy ? best.current.accuracy : position.accuracy} /> : <span className="gps-badge bad">Noch kein GPS-Signal</span>}
+      {(!position || position.accuracy > 150) && <GpsHint platform={platform} />}
+      <div className={`spot-actions ${!position || position.accuracy > 150 ? 'map-first' : ''}`}>
+        <ConfirmButton className="spot-btn" disabled={!position || !!busy} confirm="Endgültig hier einloggen?" onConfirm={() => void login()}>
+          {busy === 'measuring'
+            ? `GPS wird verfeinert … ±${Math.round(best.current?.accuracy ?? position?.accuracy ?? 0)} m`
+            : busy === 'facts'
+              ? 'Ermittle Ort …'
+              : position
+                ? '📍 Hier einloggen'
+                : 'Warte auf GPS …'}
+        </ConfirmButton>
+        <button className="wide-btn secondary" disabled={!!busy} onClick={onPickSpot}>
+          🗺️ Auf der Karte wählen
+        </button>
+      </div>
     </div>
   );
 }

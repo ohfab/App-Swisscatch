@@ -1,4 +1,4 @@
-# SwissCatch – interaktive Schweizerkarte
+# Spurlos – das Versteckspiel quer durch die Schweiz
 
 Eine Karten-App für die ganze Schweiz mit einem **schweizweiten Versteckspiel für Freunde**.
 Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC.
@@ -22,7 +22,7 @@ Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC.
 
 ## Funktionen
 
-- **Versteckis Schweiz:** Lobby mit Spielcode, Glücksrad für die Teams, Versus-Screen, eigene Bildschirme für Fänger und Verstecker, Power-ups, Fallen, Challenges und Rätsel. Mehr dazu unten.
+- **Das Spiel:** Lobby mit Spielcode, Glücksrad für die Teams, Versus-Screen, eigene Bildschirme für Fänger und Verstecker, Power-ups, Fallen, Challenges und Rätsel. Mehr dazu unten.
 
 - **Strassenkarte im Google-Stil:** die Vektor-Basiskarte von swisstopo mit Strassennamen, Gebäuden, Haltestellen, ÖV-Linien und Sehenswürdigkeiten. Sie ist in jeder Zoomstufe scharf.
 - **Weitere Karten:** Luftbild mit Strassennamen, klassische Landeskarte und Winterkarte.
@@ -38,7 +38,7 @@ Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC.
 - **App-Gefühl:** Vollbild, Bottom-Sheets, Tab-Leiste, Dunkelmodus, installierbar, offline nutzbar für bereits geladene Kartenteile.
 - **Design «Tinte & Pfirsich»:** klare Konturen, Pillen-Knöpfe, tropfende Kopfzeilen, das Maskottchen Blobi und viele kleine Animationen (springende Tab-Blase, gleitende Tabs, Glücksrad, Versus-Screen).
 
-## Das Spiel: Versteckis Schweiz
+## Das Spiel
 
 Die Hälfte der Gruppe versteckt sich irgendwo in der Schweiz, die andere Hälfte sucht sie, zum Beispiel mit dem Zug.
 
@@ -49,6 +49,8 @@ Die Hälfte der Gruppe versteckt sich irgendwo in der Schweiz, die andere Hälft
 3. Ist die Lobby voll, dreht das **Glücksrad** und zieht die Verstecker, immer die Hälfte. Der Host kann auch früher auslosen.
 4. Ein **Versus-Screen** zeigt die Teams, dann zählt die App 3-2-1 herunter.
 5. **Versteckzeit** (Standard 90 Min): Die Verstecker reisen an ihren Ort und loggen ihr Versteck ein. Die Fänger warten, zum Beispiel im Café, und sammeln dabei schon Punkte. Ohne Login nimmt die App am Ende der Versteckzeit den aktuellen Standort.
+   - Die App wartet beim Einloggen kurz auf eine genaue GPS-Messung und zeigt die Genauigkeit an.
+   - Ist das GPS ungenau (oder am PC ohne GPS), lässt sich das Versteck **auf der Karte wählen**, innerhalb der GPS-Ungenauigkeit. Die Fänger sehen, dass es von Hand gesetzt wurde.
 6. **Suche:** Die Fänger reisen los und kaufen Power-ups. Sind sie beim Versteck, tippen sie auf «Gefunden!». Liegt das Versteck höchstens 200 m entfernt, zählt es sofort, sonst bestätigen die Verstecker.
 7. Die Fänger gewinnen, wenn sie das Versteck finden, die Verstecker, wenn die Suchzeit abläuft. Danach startet der Host eine neue Runde: neu auslosen oder Rollen tauschen.
 
@@ -85,7 +87,7 @@ Die Hälfte der Gruppe versteckt sich irgendwo in der Schweiz, die andere Hälft
 
 **Fair Play:** Die App vertraut den Spielern. Sie zeigt jedem Team nur seine eigenen Informationen. Die Fänger sehen weder das Versteck noch die Standorte der Verstecker. Das Versteck erscheint erst am Ende der Runde.
 
-**Technik:** Die Geräte tauschen sich über einen öffentlichen MQTT-Broker aus, standardmässig `broker.emqx.io`. Alle Nachrichten und Fotos sind mit einem Schlüssel aus dem Spielcode verschlüsselt (AES-GCM). Der Broker sieht deshalb weder Namen noch Standorte. Der Host verwaltet Regeln und Auslosung. Jedes Gerät schreibt nur seine eigenen Aktionen, den Spielstand rechnet jedes Gerät gleich daraus aus. Verlässt der Host das Spiel, übernimmt automatisch der Spieler, der am längsten dabei ist.
+**Technik:** Die Geräte tauschen sich über einen öffentlichen MQTT-Broker aus, standardmässig `broker.emqx.io`. Alle Nachrichten und Fotos sind mit einem Schlüssel aus dem Spielcode verschlüsselt (AES-GCM). Der Broker sieht deshalb weder Namen noch Standorte. Der Host verwaltet Regeln und Auslosung. Jedes Gerät schreibt nur seine eigenen Aktionen, den Spielstand rechnet jedes Gerät gleich daraus aus. Damit Glücksrad, Countdown und Challenges überall gleichzeitig laufen, gleichen alle Geräte ihre Uhr mit dem Host ab (wie bei NTP), auch wenn eine Geräteuhr ein paar Sekunden falsch geht. Verlässt der Host das Spiel, übernimmt automatisch der Spieler, der am längsten dabei ist.
 
 **Eigener Broker:** Beim Build `VITE_MQTT_URL=wss://…` setzen oder die App einmal mit `?broker=wss://…` öffnen.
 

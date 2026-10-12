@@ -14,7 +14,8 @@ import { useGame, takeInviteCode } from './game/useGame';
 import { formatClock, isOnline } from './game/rules';
 import { derive } from './game/derive';
 import { DrawShow } from './components/game/DrawShow';
-import { TEAM_ICON, TEAM_LABEL, useCantonProps } from './components/game/common';
+import { ConfirmButton, TEAM_ICON, TEAM_LABEL, useCantonProps } from './components/game/common';
+import { manualSpotRadius } from './game/content';
 import { useInstallPrompt } from './hooks/useInstallPrompt';
 import { useNow } from './hooks/useNow';
 import type { GamePlayerMarker } from './components/MapView';
@@ -22,7 +23,7 @@ import { Toast } from './components/Toast';
 import { CloseIcon, DownloadIcon, FlagIcon, LayersIcon, LocateFilledIcon, LocateIcon, TrainIcon } from './components/Icons';
 import { BASEMAPS, DEFAULT_BASEMAP, type BasemapId, type OverlayId } from './lib/config';
 import { loadCantons, type CantonFeature } from './lib/cantons';
-import type { LatLng } from './lib/geo';
+import { distanceMeters, formatDistance, type LatLng } from './lib/geo';
 import type { SearchResult } from './lib/geoadmin';
 import type { Station } from './lib/transport';
 import { placeKey, type Place } from './lib/place';
@@ -90,7 +91,9 @@ export function App() {
   const game = useGame(geo.position);
   const [inviteCode] = useState(() => takeInviteCode() ?? '');
   const gameMeta = game.snapshot?.meta ?? null;
-  const gameNow = useNow(1000, !!gameMeta);
+  // Spieluhr: eigene Uhr plus Versatz zur Uhr des Hosts (alle Geräte gleichzeitig)
+  const clockOffset = game.snapshot?.clockOffset ?? 0;
+  const gameNow = useNow(1000, !!gameMeta) + clockOffset;
 
   // Einladungslink geöffnet: direkt den Spiel-Tab zeigen; Download-Link (?app): App-Seite zeigen
   useEffect(() => {
@@ -237,23 +240,74 @@ export function App() {
     setOpenStationId(null);
   }, []);
 
+  // ---------- Versteck auf der Karte wählen ----------
+  const [spotPick, setSpotPick] = useState<{ origin: LatLng | null; maxM: number | null } | null>(null);
+  const [pickCenter, setPickCenter] = useState<LatLng | null>(null);
+  const [pickBusy, setPickBusy] = useState(false);
+
+  const startSpotPick = useCallback(() => {
+    const p = geo.position;
+    const origin = p ? { lat: p.lat, lng: p.lng } : null;
+    setSpotPick({ origin, maxM: p ? manualSpotRadius(p.accuracy) : null });
+    setPanel(null);
+    setFollow(false);
+    afterPaint(() => {
+      const map = mapRef.current;
+      if (map && origin) map.flyTo(origin, Math.max(Math.round(map.getZoom()), 15), { duration: 0.8 });
+    });
+  }, [geo.position]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!spotPick || !map) return;
+    const onMove = () => setPickCenter(map.getCenter());
+    onMove();
+    map.on('move', onMove);
+    return () => {
+      map.off('move', onMove);
+    };
+  }, [spotPick]);
+
+  const confirmSpotPick = useCallback(async () => {
+    const client = game.client;
+    if (!client || !pickCenter) return;
+    setPickBusy(true);
+    try {
+      const at = { lat: pickCenter.lat, lng: pickCenter.lng };
+      const { spotFacts } = await import('./game/facts');
+      const facts = await spotFacts(at);
+      client.logSpot({ ...at, acc: 0, t: client.now() }, facts, { manual: true });
+      setToast('Versteck eingeloggt 🏠');
+      setSpotPick(null);
+      setPanel({ type: 'game' });
+    } finally {
+      setPickBusy(false);
+    }
+  }, [game.client, pickCenter]);
+
   const handleTap = useCallback(
-    (_p: LatLng, canton: CantonFeature | null) => {
+    (p: LatLng, canton: CantonFeature | null) => {
+      // Beim Wählen des Verstecks: angetippten Punkt in die Mitte holen
+      if (spotPick) {
+        mapRef.current?.panTo(p);
+        return;
+      }
       if (panel) {
         closePanel();
         return;
       }
       if (canton) setPanel({ type: 'canton', canton });
     },
-    [panel, closePanel],
+    [panel, closePanel, spotPick],
   );
 
   const handleLongPress = useCallback(
     (p: LatLng) => {
+      if (spotPick) return;
       setHintSeen(true);
       openPlace({ lat: p.lat, lng: p.lng, source: 'map' });
     },
-    [openPlace, setHintSeen],
+    [openPlace, setHintSeen, spotPick],
   );
 
   const handlePinClick = useCallback(
@@ -334,6 +388,7 @@ export function App() {
         gamePlayers={gamePlayers}
         gameAreas={gameAreas}
         gameSpot={gameSpot}
+        pickCircle={spotPick?.origin && spotPick.maxM ? { ...spotPick.origin, radius: spotPick.maxM } : null}
         onBasemapError={() => {
           setToast('Strassenkarte nicht verfügbar – zeige Landeskarte');
           setBasemap('farbe');
@@ -448,6 +503,45 @@ export function App() {
           onClose={closePanel}
         />
       )}
+      {spotPick && (
+        <>
+          <div className="pick-cross" aria-hidden="true">
+            <span />
+          </div>
+          <div className="pick-card" role="dialog" aria-label="Versteck auf der Karte wählen">
+            {(() => {
+              const dist = pickCenter && spotPick.origin ? distanceMeters(pickCenter, spotPick.origin) : null;
+              const tooFar = dist !== null && spotPick.maxM !== null && dist > spotPick.maxM;
+              return (
+                <>
+                  <strong>🏠 Versteck auf der Karte wählen</strong>
+                  <p className={tooFar ? 'bad' : ''}>
+                    {!spotPick.origin
+                      ? 'Ohne GPS: Schieb die Karte, bis das Kreuz auf deinem Versteck liegt. Die Fänger sehen, dass es von Hand gesetzt ist.'
+                      : tooFar
+                        ? `Zu weit weg – höchstens ${formatDistance(spotPick.maxM!)} von deinem GPS-Standort.`
+                        : `Schieb die Karte, bis das Kreuz auf deinem Versteck liegt · ${formatDistance(dist ?? 0)} vom GPS-Standort`}
+                  </p>
+                  <div className="pick-actions">
+                    <button
+                      className="wide-btn secondary"
+                      onClick={() => {
+                        setSpotPick(null);
+                        setPanel({ type: 'game' });
+                      }}
+                    >
+                      Abbrechen
+                    </button>
+                    <ConfirmButton className="wide-btn start" disabled={!pickCenter || tooFar || pickBusy} confirm="Endgültig hier?" onConfirm={() => void confirmSpotPick()}>
+                      {pickBusy ? 'Ermittle Ort …' : 'Hier einloggen'}
+                    </ConfirmButton>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </>
+      )}
       {panel?.type === 'app' && <AppSheet onClose={closePanel} onToast={setToast} />}
       {panel?.type === 'place' && (
         <PlaceSheet
@@ -543,6 +637,7 @@ export function App() {
           onShowPoint={(lat, lng) => focus({ lat, lng }, 16)}
           onToast={setToast}
           onOpenApp={() => setPanel({ type: 'app' })}
+          onPickSpot={startSpotPick}
           onClose={closePanel}
         />
       )}
@@ -564,7 +659,7 @@ export function App() {
         </div>
       )}
       {showDraw && gameMeta && game.snapshot && (
-        <DrawShow meta={gameMeta} players={game.snapshot.players} meId={game.snapshot.me.id} onSkip={() => setSkippedDraw(gameMeta.draw!.seed)} />
+        <DrawShow meta={gameMeta} players={game.snapshot.players} meId={game.snapshot.me.id} clockOffset={clockOffset} onSkip={() => setSkippedDraw(gameMeta.draw!.seed)} />
       )}
 
       <TabBar active={activeTab} pinCount={pins.length} onSelect={selectTab} />

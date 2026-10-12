@@ -25,6 +25,7 @@ interface Props {
   onShowPoint: (lat: number, lng: number) => void;
   onToast: (msg: string) => void;
   onOpenApp: () => void;
+  onPickSpot: () => void;
   onClose: () => void;
 }
 
@@ -91,7 +92,7 @@ function StartView({ game, prefillCode }: { game: GameApi; prefillCode: string }
           <h3>
             <FlagIcon size={18} /> Neues Spiel
           </h3>
-          <input className="plain-input" value={gameName} maxLength={30} placeholder="Name, z.B. Versteckis Ostschweiz" onChange={(e) => setGameName(e.target.value)} />
+          <input className="plain-input" value={gameName} maxLength={30} placeholder="Name, z.B. Ostschweiz-Runde" onChange={(e) => setGameName(e.target.value)} />
           <button
             className="wide-btn secondary"
             disabled={!nameOk}
@@ -163,10 +164,10 @@ function LobbyView({ game, snap, position, now, onToast }: { game: GameApi; snap
   const link = inviteLink(snap.code);
 
   const share = async () => {
-    const text = `Komm ins SwissCatch-Versteckspiel «${meta.name}»! Code: ${snap.code}`;
+    const text = `Komm zu Spurlos – Runde «${meta.name}»! Code: ${snap.code}`;
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'SwissCatch', text, url: link });
+        await navigator.share({ title: 'Spurlos', text, url: link });
         return;
       } catch (err) {
         if ((err as Error).name === 'AbortError') return;
@@ -335,14 +336,14 @@ function ResultView({ game, snap, d, onShowPoint }: { game: GameApi; snap: GameS
 
 // ---------- Sheet ----------
 
-export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onStartGps, onShowPoint, onToast, onOpenApp, onClose }: Props) {
+export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onStartGps, onShowPoint, onToast, onOpenApp, onPickSpot, onClose }: Props) {
   const { installed, canPrompt, ios, install } = useInstallPrompt();
   const snap = game.snapshot;
   const meta = snap?.meta ?? null;
   const inGame = !!game.session;
   const stage = d?.stage;
 
-  const title = meta ? meta.name : inGame ? 'Verbinde …' : 'Versteckis Schweiz';
+  const title = meta ? meta.name : inGame ? 'Verbinde …' : 'Spurlos';
   const subtitle = meta
     ? `${{ lobby: 'Lobby', draw: 'Auslosung', versus: 'Gleich geht’s los', hiding: 'Versteckzeit', seeking: 'Suche läuft', ended: 'Beendet' }[stage ?? 'lobby']} · Code ${snap!.code}`
     : inGame
@@ -405,9 +406,9 @@ export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onSt
           {(stage === 'draw' || stage === 'versus') && <p className="muted route-note">Die Auslosung läuft …</p>}
           {(stage === 'hiding' || stage === 'seeking') &&
             (d.teamOf(snap.me.id) === 'seeker' ? (
-              <SeekerView client={game.client} snap={snap} d={d} now={now} position={position} onShowPoint={onShowPoint} onToast={onToast} />
+              <SeekerView client={game.client} snap={snap} d={d} now={now} position={position} onShowPoint={onShowPoint} onToast={onToast} onPickSpot={onPickSpot} />
             ) : (
-              <HiderView client={game.client} snap={snap} d={d} now={now} position={position} onShowPoint={onShowPoint} onToast={onToast} />
+              <HiderView client={game.client} snap={snap} d={d} now={now} position={position} onShowPoint={onShowPoint} onToast={onToast} onPickSpot={onPickSpot} />
             ))}
           {stage === 'ended' && <ResultView game={game} snap={snap} d={d} onShowPoint={onShowPoint} />}
           {meta.hostId === snap.me.id && (stage === 'hiding' || stage === 'seeking') && (

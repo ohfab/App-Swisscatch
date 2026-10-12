@@ -23,6 +23,8 @@ interface Props {
   meta: GameMeta;
   players: Record<string, PlayerState>;
   meId: string;
+  /** Versatz zur Spieluhr, damit das Rad auf allen Geräten gleichzeitig dreht */
+  clockOffset: number;
   onSkip: () => void;
 }
 
@@ -200,8 +202,8 @@ function VersusStage({ meta, players, meId, now }: { meta: GameMeta; players: Pr
 }
 
 /** Vollbild-Show: Glücksrad, dann Versus-Screen, dann Countdown */
-export function DrawShow({ meta, players, meId, onSkip }: Props) {
-  const now = useNow(100);
+export function DrawShow({ meta, players, meId, clockOffset, onSkip }: Props) {
+  const now = useNow(100) + clockOffset;
   const draw = meta.draw;
   const drawEnd = useMemo(() => (draw ? draw.at + drawDuration(draw.hiders.length) : 0), [draw]);
   if (!draw) return null;

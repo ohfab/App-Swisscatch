@@ -74,6 +74,8 @@ export interface MapViewProps {
   gameAreas: Area[];
   /** Für die Verstecker: das eigene Versteck */
   gameSpot: LatLng | null;
+  /** Beim Wählen des Verstecks auf der Karte: erlaubter Bereich um den GPS-Standort */
+  pickCircle?: { lat: number; lng: number; radius: number } | null;
   onBasemapError?: () => void;
   onReady: (map: L.Map) => void;
   onTap: (p: LatLng, canton: CantonFeature | null) => void;
@@ -158,6 +160,7 @@ export function MapView(props: MapViewProps) {
   const stationLayerRef = useRef<L.LayerGroup | null>(null);
   const positionRef = useRef<{ dot: L.Marker; circle: L.Circle } | null>(null);
   const selectionRef = useRef<L.Marker | null>(null);
+  const pickCircleRef = useRef<L.Circle | null>(null);
   const hadFixRef = useRef(false);
   const prevFollowRef = useRef(false);
 
@@ -572,6 +575,24 @@ export function MapView(props: MapViewProps) {
     const end = ll(c.legs[c.legs.length - 1]!.to);
     if (end) L.circleMarker(end, { pane: 'route', radius: 8, color: '#D52B1E', weight: 3, fillColor: '#D52B1E', fillOpacity: 1 }).addTo(group);
   }, [props.route]);
+
+  // Erlaubter Bereich beim Wählen des Verstecks
+  const pc = props.pickCircle;
+  useEffect(() => {
+    const map = mapRef.current;
+    pickCircleRef.current?.remove();
+    pickCircleRef.current = null;
+    if (!map || !pc) return;
+    pickCircleRef.current = L.circle([pc.lat, pc.lng], {
+      radius: pc.radius,
+      color: '#f2914f',
+      weight: 3,
+      dashArray: '8 7',
+      fillColor: '#f9b07e',
+      fillOpacity: 0.14,
+      interactive: false,
+    }).addTo(map);
+  }, [pc?.lat, pc?.lng, pc?.radius]);
 
   // Markierter Punkt
   useEffect(() => {

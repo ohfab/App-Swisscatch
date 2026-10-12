@@ -21,6 +21,8 @@ export interface GameSnapshot {
   notFound: boolean;
   /** Letzte Meldung für einen Hinweis */
   notice: { text: string; t: number } | null;
+  /** Versatz der eigenen Uhr zur Spieluhr (Uhr des Hosts) in ms */
+  clockOffset: number;
 }
 
 /** Was eine neue Aktion braucht; ID, Zeit und Runde ergänzt der Client */
@@ -31,6 +33,10 @@ const LIVE_MIN_MOVE = 25;
 const HEARTBEAT = 30_000;
 
 const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+/** Messungen für den Uhrabgleich: so viele am Anfang, danach alle 30 s eine */
+const SYNC_BURST = 8;
+const SYNC_EVERY = 30_000;
 
 export class GameClient {
   private snap: GameSnapshot;
@@ -47,12 +53,18 @@ export class GameClient {
   private rev = 0;
   private restored = false;
   private autoSpotTried = false;
+  /** Uhrabgleich mit dem Host: Messungen (Laufzeit, Versatz) und offene Anfrage */
+  private offset = 0;
+  private samples: { rtt: number; offset: number }[] = [];
+  private syncHost: string | null = null;
+  private pendingPing: { n: string; t0: number } | null = null;
+  private lastPing = 0;
 
   constructor(code: string, me: Me, create?: { name: string; settings: GameSettings }) {
     this.create = create ?? null;
     const now = Date.now();
     this.mine = { v: 2, id: me.id, name: me.name, color: me.color, joinedAt: now, seen: now, actions: [] };
-    this.snap = { code, me, conn: 'connecting', meta: null, players: {}, photos: {}, notFound: false, notice: null };
+    this.snap = { code, me, conn: 'connecting', meta: null, players: {}, photos: {}, notFound: false, notice: null, clockOffset: 0 };
   }
 
   // ---------- Zustand für React ----------
@@ -90,8 +102,17 @@ export class GameClient {
     return this.teamOf(this.mine.id);
   }
 
+  /**
+   * Spieluhr: die Uhr des Hosts. Handys und PCs gehen oft ein paar Sekunden falsch;
+   * damit Glücksrad, Countdown und Challenges überall gleichzeitig laufen,
+   * rechnen alle mit derselben Zeit.
+   */
+  now(): number {
+    return Date.now() + this.offset;
+  }
+
   /** Abgeleiteter Spielstand (ohne Quizfragen, die brauchen Kantonsdaten) */
-  derived(now = Date.now()) {
+  derived(now = this.now()) {
     return derive(this.snap.meta, this.snap.players, now, null);
   }
 
@@ -148,11 +169,11 @@ export class GameClient {
       v: 2,
       rev: 0,
       round: 1,
-      name: this.create?.name || 'SwissCatch',
+      name: this.create?.name || 'Spurlos',
       hostId: this.mine.id,
       phase: 'lobby',
       settings: this.create!.settings,
-      createdAt: Date.now(),
+      createdAt: this.now(),
     };
   }
 
@@ -165,7 +186,7 @@ export class GameClient {
   private async publishMe() {
     // Erst senden, wenn das Spiel existiert (sonst bliebe bei falschem Code ein Eintrag liegen)
     if (this.closed || (!this.snap.meta && !this.create)) return;
-    this.mine = { ...this.mine, seen: Date.now() };
+    this.mine = { ...this.mine, seen: this.now() };
     this.set({ players: { ...this.snap.players, [this.mine.id]: this.mine } });
     await this.publish(`p/${this.mine.id}`, this.mine, true);
   }
@@ -180,8 +201,14 @@ export class GameClient {
   // ---------- Eingehende Nachrichten ----------
 
   private async onMessage(topic: string, payload: string) {
+    // Ankunftszeit sofort festhalten (für den Uhrabgleich), noch vor dem Entschlüsseln
+    const arrival = Date.now();
     if (!this.room || !topic.startsWith(this.base + '/')) return;
     const rel = topic.slice(this.base.length + 1);
+    if (rel.startsWith('t/')) {
+      void this.onTime(rel, payload, arrival);
+      return;
+    }
     if (rel.startsWith('img/')) {
       if (!payload) return;
       const img = await open<{ id: string; data: string }>(this.room.key, payload);
@@ -203,7 +230,7 @@ export class GameClient {
         // Eigener gespeicherter Stand nach dem Neuladen übernehmen
         if (!this.restored) {
           this.restored = true;
-          this.mine = { ...p, name: this.mine.name, color: this.mine.color, seen: Date.now() };
+          this.mine = { ...p, name: this.mine.name, color: this.mine.color, seen: this.now() };
           void this.publishMe();
         }
         return;
@@ -248,7 +275,10 @@ export class GameClient {
     const prev = this.snap.meta;
     this.set({ meta: m, notFound: false });
     // Spiel gefunden: jetzt dem Spiel beitreten (nach dem Wiederherstellen des eigenen Stands)
-    if (!prev) window.setTimeout(() => void this.publishMe(), this.restored ? 0 : 1300);
+    if (!prev) {
+      window.setTimeout(() => void this.publishMe(), this.restored ? 0 : 1300);
+      window.setTimeout(() => this.syncClock(true), 300);
+    }
     // Neue Runde: eigene Aktionen der alten Runde verwerfen
     if (this.mine.actions.some((a) => a.round !== m.round)) {
       this.mine = { ...this.mine, actions: this.mine.actions.filter((a) => a.round === m.round) };
@@ -256,6 +286,62 @@ export class GameClient {
       void this.publishMe();
     }
     if (this.isHost) this.hostSync();
+  }
+
+  // ---------- Uhrabgleich mit dem Host ----------
+
+  /**
+   * Nicht-Host: Zeit beim Host anfragen, wie bei NTP. Der Host meldet, wann die Anfrage
+   * ankam und wann er antwortete; so fällt seine Bearbeitungszeit aus der Rechnung.
+   */
+  private syncClock(force = false) {
+    const m = this.meta;
+    if (!m || this.isHost || !this.mq || !this.room || this.closed) return;
+    if (this.syncHost !== m.hostId) {
+      // Neuer Host: alte Messungen gelten nicht mehr
+      this.syncHost = m.hostId;
+      this.samples = [];
+    }
+    const due = force || (this.samples.length < SYNC_BURST ? Date.now() - this.lastPing > 900 : Date.now() - this.lastPing > SYNC_EVERY);
+    if (!due) return;
+    this.lastPing = Date.now();
+    const n = newId();
+    const room = this.room;
+    const mq = this.mq;
+    void seal(room.key, { n }).then((payload) => {
+      if (this.closed) return;
+      // Zeitpunkt erst nach dem Verschlüsseln nehmen, direkt vor dem Senden
+      this.pendingPing = { n, t0: Date.now() };
+      mq.publish(`${this.base}/t/q/${this.mine.id}`, payload, { qos: 0 });
+    });
+  }
+
+  private async onTime(rel: string, payload: string, arrival: number) {
+    if (!payload || !this.room) return;
+    const [, dir, id] = rel.split('/');
+    if (dir === 'q' && id && this.isHost) {
+      const h1 = arrival + this.offset;
+      const q = await open<{ n: string }>(this.room.key, payload);
+      if (q) void this.publish(`t/a/${id}`, { n: q.n, h1, h2: this.now() }, false);
+      return;
+    }
+    if (dir === 'a' && id === this.mine.id && !this.isHost) {
+      const ping = this.pendingPing;
+      const a = await open<{ n: string; h1: number; h2: number }>(this.room.key, payload);
+      if (!a || !ping || a.n !== ping.n) return;
+      this.pendingPing = null;
+      const rtt = arrival - ping.t0 - (a.h2 - a.h1);
+      if (rtt < 0 || rtt > 10_000) return;
+      const offset = (a.h1 - ping.t0 + (a.h2 - arrival)) / 2;
+      this.samples = [...this.samples, { rtt, offset }].slice(-16);
+      // Die Messung mit der kürzesten Laufzeit ist am genauesten
+      const best = this.samples.reduce((x, y) => (y.rtt < x.rtt ? y : x));
+      if (Math.abs(best.offset - this.offset) > 10) {
+        this.offset = best.offset;
+        this.set({ clockOffset: this.offset });
+      }
+      if (this.samples.length < SYNC_BURST) window.setTimeout(() => this.syncClock(), 1000);
+    }
   }
 
   // ---------- Standort ----------
@@ -287,7 +373,7 @@ export class GameClient {
 
   addAction(a: NewAction): Action {
     const m = this.snap.meta;
-    const action = { ...a, id: newId(), t: Date.now(), round: m?.round ?? 1 } as Action;
+    const action = { ...a, id: newId(), t: this.now(), round: m?.round ?? 1 } as Action;
     this.mine = { ...this.mine, actions: [...this.mine.actions, action] };
     void this.publishMe();
     return action;
@@ -300,8 +386,9 @@ export class GameClient {
     return id;
   }
 
-  logSpot(fix: Fix, facts: SpotFacts, auto = false) {
-    this.addAction({ kind: 'spot', fix, facts, ...(auto ? { auto: true } : {}) });
+  /** Versteck einloggen; `manual`: auf der Karte gewählt statt per GPS */
+  logSpot(fix: Fix, facts: SpotFacts, opts: { auto?: boolean; manual?: boolean } = {}) {
+    this.addAction({ kind: 'spot', fix, facts, ...(opts.auto ? { auto: true } : {}), ...(opts.manual ? { manual: true } : {}) });
   }
 
   rename(name: string) {
@@ -324,7 +411,7 @@ export class GameClient {
     const m = this.meta;
     if (!m || !this.isHost || m.phase !== 'lobby') return;
     const ids = Object.values(this.snap.players)
-      .filter((p) => isOnline(p) || p.id === this.mine.id)
+      .filter((p) => isOnline(p, this.now()) || p.id === this.mine.id)
       .sort((a, b) => a.joinedAt - b.joinedAt)
       .map((p) => p.id);
     if (ids.length < 2) return;
@@ -345,7 +432,8 @@ export class GameClient {
       const from = preferred.length ? preferred : pool;
       hiders.push(from.splice(Math.floor(r() * from.length), 1)[0]!);
     }
-    const at = Date.now() + 1500;
+    // Etwas Vorlauf, damit die Nachricht auch auf langsamen Handys ankommt, bevor das Rad dreht
+    const at = this.now() + 3000;
     const draw: DrawInfo = { seed, order, hiders, at };
     void this.publishMeta({ ...m, phase: 'running', draw, startedAt: at + drawDuration(hiders.length) + VERSUS_MS, endedAt: undefined, endReason: undefined });
   }
@@ -353,7 +441,7 @@ export class GameClient {
   end(reason: GameMeta['endReason'] = 'host') {
     const m = this.meta;
     if (!m || !this.isHost || m.phase !== 'running') return;
-    void this.publishMeta({ ...m, phase: 'ended', endedAt: Date.now(), endReason: reason });
+    void this.publishMeta({ ...m, phase: 'ended', endedAt: this.now(), endReason: reason });
   }
 
   newRound() {
@@ -364,7 +452,7 @@ export class GameClient {
 
   async leave() {
     const m = this.meta;
-    const others = Object.values(this.snap.players).filter((p) => p.id !== this.mine.id && isOnline(p));
+    const others = Object.values(this.snap.players).filter((p) => p.id !== this.mine.id && isOnline(p, this.now()));
     if (m && this.isHost && others.length) {
       // Host-Rolle an den Spieler übergeben, der am längsten dabei ist
       const next = others.sort((a, b) => a.joinedAt - b.joinedAt)[0]!;
@@ -381,7 +469,7 @@ export class GameClient {
     const m = this.meta;
     if (!m || !this.isHost) return;
     if (m.phase === 'lobby') {
-      const online = Object.values(this.snap.players).filter((p) => isOnline(p) || p.id === this.mine.id);
+      const online = Object.values(this.snap.players).filter((p) => isOnline(p, this.now()) || p.id === this.mine.id);
       // Automatisch nur in der ersten Runde; danach lost der Host von Hand aus
       if (m.round === 1 && online.length >= m.settings.maxPlayers) this.draw();
       return;
@@ -405,18 +493,19 @@ export class GameClient {
         if (this.derived()?.spot) return;
         const { spotFacts } = await import('./facts');
         const facts = await spotFacts(fix);
-        if (!this.derived()?.spot) this.logSpot(fix, facts, true);
+        if (!this.derived()?.spot) this.logSpot(fix, facts, { auto: true });
       }, delay);
     }
     if (this.isHost) {
       this.hostSync();
       return;
     }
+    this.syncClock();
     // Host weg? Der am längsten anwesende Spieler übernimmt.
     const host = this.snap.players[m.hostId];
-    if (host && isOnline(host)) return;
-    if (!host && Date.now() - (m.createdAt ?? 0) < 60_000) return;
-    const online = Object.values(this.snap.players).filter((p) => p.id !== m.hostId && isOnline(p));
+    if (host && isOnline(host, this.now())) return;
+    if (!host && this.now() - (m.createdAt ?? 0) < 60_000) return;
+    const online = Object.values(this.snap.players).filter((p) => p.id !== m.hostId && isOnline(p, this.now()));
     const first = online.sort((a, b) => a.joinedAt - b.joinedAt)[0];
     if (first?.id === this.mine.id) {
       this.notify('Der Host ist weg – du leitest jetzt das Spiel.');

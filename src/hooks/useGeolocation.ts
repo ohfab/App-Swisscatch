@@ -52,7 +52,8 @@ export function useGeolocation() {
         }
         // TIMEOUT: einfach weiter warten
       },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+      // maximumAge 0: immer frisch messen, keine zwischengespeicherte (oft grobe) Position
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
     );
   }, []);
 
