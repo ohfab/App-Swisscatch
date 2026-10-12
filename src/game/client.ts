@@ -1,5 +1,5 @@
 import type { MqttClient } from 'mqtt';
-import { brokerUrl, TOPIC_PREFIX } from './config';
+import { brokerUrls, TOPIC_PREFIX } from './config';
 import { deriveRoom, open, seal, type Room } from './crypto';
 import { isOnline } from './rules';
 import { derive, drawDuration, VERSUS_MS } from './derive';
@@ -42,7 +42,11 @@ const SYNC_EVERY = 30_000;
 export class GameClient {
   private snap: GameSnapshot;
   private listeners = new Set<() => void>();
-  private mq: MqttClient | null = null;
+  /** Verbindungen zu allen Brokern (gesendet wird an alle) */
+  private conns: MqttClient[] = [];
+  private onlineConns = new Set<MqttClient>();
+  private subscribed = false;
+  private lastMetaRefresh = 0;
   private room: Room | null = null;
   private base = '';
   private mine: PlayerState;
@@ -126,33 +130,24 @@ export class GameClient {
     // MQTT erst laden, wenn wirklich gespielt wird (hält den App-Start schlank)
     const { default: mqtt } = await import('mqtt');
     if (this.closed) return;
-    const mq = mqtt.connect(brokerUrl(), {
-      clientId: `sc_${this.mine.id.slice(0, 8)}_${Math.random().toString(36).slice(2, 8)}`,
-      clean: true,
-      keepalive: 30,
-      reconnectPeriod: 3000,
-      connectTimeout: 12_000,
-    });
-    this.mq = mq;
-    mq.on('connect', () => {
-      this.set({ conn: 'online' });
-      mq.subscribe(`${this.base}/#`, { qos: 1 }, () => {
-        // Kurz warten, damit ein früher gespeicherter eigener Stand zuerst ankommt
-        window.setTimeout(() => {
-          this.restored = true;
-          void this.publishMe();
-        }, 1200);
-        window.setTimeout(() => {
-          if (this.closed || this.snap.meta) return;
-          if (this.create) void this.publishMeta(this.initialMeta());
-          else this.set({ notFound: true });
-        }, 2500);
+    const clientId = `sc_${this.mine.id.slice(0, 8)}_${Math.random().toString(36).slice(2, 8)}`;
+    for (const url of brokerUrls()) {
+      const mq = mqtt.connect(url, { clientId, clean: true, keepalive: 30, reconnectPeriod: 3000, connectTimeout: 12_000 });
+      this.conns.push(mq);
+      mq.on('connect', () => {
+        this.onlineConns.add(mq);
+        this.updateConn();
+        mq.subscribe(`${this.base}/#`, { qos: 1 }, () => this.onFirstSubscribe());
       });
-    });
-    mq.on('reconnect', () => this.set({ conn: 'connecting' }));
-    mq.on('offline', () => this.set({ conn: 'offline' }));
-    mq.on('close', () => !this.closed && this.set({ conn: 'offline' }));
-    mq.on('message', (topic, payload) => void this.onMessage(topic, payload.toString()));
+      const down = () => {
+        this.onlineConns.delete(mq);
+        this.updateConn();
+      };
+      mq.on('reconnect', down);
+      mq.on('offline', down);
+      mq.on('close', down);
+      mq.on('message', (topic, payload) => void this.onMessage(topic, payload.toString()));
+    }
 
     this.intervals.push(window.setInterval(() => void this.publishMe(), HEARTBEAT));
     this.intervals.push(window.setInterval(() => this.tick(), 3000));
@@ -161,8 +156,30 @@ export class GameClient {
   close() {
     this.closed = true;
     this.intervals.forEach((i) => window.clearInterval(i));
-    this.mq?.end(true);
+    this.conns.forEach((c) => c.end(true));
     this.listeners.clear();
+  }
+
+  private updateConn() {
+    if (this.closed) return;
+    const conn: ConnState = this.onlineConns.size > 0 ? 'online' : this.conns.some((c) => c.reconnecting) ? 'connecting' : 'offline';
+    if (conn !== this.snap.conn) this.set({ conn });
+  }
+
+  /** Erste funktionierende Verbindung: eigenen Stand wiederherstellen, Spiel finden oder anlegen */
+  private onFirstSubscribe() {
+    if (this.subscribed) return;
+    this.subscribed = true;
+    // Kurz warten, damit ein früher gespeicherter eigener Stand zuerst ankommt
+    window.setTimeout(() => {
+      this.restored = true;
+      void this.publishMe();
+    }, 1200);
+    window.setTimeout(() => {
+      if (this.closed || this.snap.meta) return;
+      if (this.create) void this.publishMeta(this.initialMeta());
+      else this.set({ notFound: true });
+    }, 2500);
   }
 
   private initialMeta(): GameMeta {
@@ -179,15 +196,16 @@ export class GameClient {
   }
 
   private async publish(sub: string, data: unknown, retain: boolean) {
-    if (!this.mq || !this.room) return;
+    if (!this.conns.length || !this.room) return;
     const payload = data === null ? '' : await seal(this.room.key, data);
-    this.mq.publish(`${this.base}/${sub}`, payload, { qos: 1, retain });
+    for (const c of this.conns) c.publish(`${this.base}/${sub}`, payload, { qos: 1, retain });
   }
 
   private async publishMe() {
     // Erst senden, wenn das Spiel existiert (sonst bliebe bei falschem Code ein Eintrag liegen)
     if (this.closed || (!this.snap.meta && !this.create)) return;
-    this.mine = { ...this.mine, seen: this.now() };
+    // Streng steigend, damit andere Geräte neuere Stände nie als Doppel verwerfen
+    this.mine = { ...this.mine, seen: Math.max(this.mine.seen + 1, this.now()) };
     this.set({ players: { ...this.snap.players, [this.mine.id]: this.mine } });
     await this.publish(`p/${this.mine.id}`, this.mine, true);
   }
@@ -237,7 +255,8 @@ export class GameClient {
         return;
       }
       const prev = this.snap.players[id];
-      if (prev && prev.seen > p.seen) return; // ältere Nachricht, die verspätet entschlüsselt wurde
+      // Ältere oder doppelte Nachricht (kommt über beide Broker)
+      if (prev && prev.seen >= p.seen) return;
       this.announce(prev, p);
       this.set({ players: { ...this.snap.players, [id]: p } });
       if (this.isHost) this.hostSync();
@@ -246,7 +265,7 @@ export class GameClient {
     if (rel === 'meta') {
       if (payload === '') return;
       const m = await open<GameMeta>(this.room.key, payload);
-      if (!m || m.v !== 2 || (this.meta && m.rev < this.meta.rev)) return;
+      if (!m || m.v !== 2 || (this.meta && m.rev <= this.meta.rev)) return;
       this.rev = Math.max(this.rev, m.rev);
       this.applyMeta(m);
     }
@@ -299,7 +318,7 @@ export class GameClient {
    */
   private syncClock(force = false) {
     const m = this.meta;
-    if (!m || this.isHost || !this.mq || !this.room || this.closed) return;
+    if (!m || this.isHost || !this.conns.length || !this.room || this.closed) return;
     if (this.syncHost !== m.hostId) {
       // Neuer Host: alte Messungen gelten nicht mehr
       this.syncHost = m.hostId;
@@ -310,12 +329,11 @@ export class GameClient {
     this.lastPing = Date.now();
     const n = newId();
     const room = this.room;
-    const mq = this.mq;
     void seal(room.key, { n }).then((payload) => {
       if (this.closed) return;
       // Zeitpunkt erst nach dem Verschlüsseln nehmen, direkt vor dem Senden
       this.pendingPing = { n, t0: Date.now() };
-      mq.publish(`${this.base}/t/q/${this.mine.id}`, payload, { qos: 0 });
+      for (const c of this.conns) c.publish(`${this.base}/t/q/${this.mine.id}`, payload, { qos: 0 });
     });
   }
 
@@ -484,6 +502,11 @@ export class GameClient {
   private hostSync() {
     const m = this.meta;
     if (!m || !this.isHost) return;
+    // Gespeicherten Spielstand regelmässig auffrischen (z.B. nach dem Ausfall eines Brokers)
+    if (Date.now() - this.lastMetaRefresh > 60_000) {
+      this.lastMetaRefresh = Date.now();
+      void this.publish('meta', m, true);
+    }
     if (m.phase === 'lobby') {
       const online = Object.values(this.snap.players).filter((p) => isOnline(p, this.now()) || p.id === this.mine.id);
       // Automatisch nur in der ersten Runde; danach lost der Host von Hand aus

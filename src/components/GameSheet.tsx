@@ -14,6 +14,8 @@ import { Avatar, TEAM_ICON, TEAM_LABEL, useCantonProps } from './game/common';
 import { ChatPanel } from './game/Chat';
 import { REGIONS } from '../game/content';
 import { setSoundOn, soundOn, subscribeSound } from '../lib/sound';
+import { useNotifyPermission } from '../lib/notify';
+import { isNative } from '../lib/native';
 import { HiderView, SeekerView } from './game/TeamViews';
 import { Blob } from './Art';
 
@@ -396,6 +398,7 @@ function ResultView({ game, snap, d, onShowPoint }: { game: GameApi; snap: GameS
 export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onStartGps, onShowPoint, onToast, onOpenApp, onPickSpot, onClose }: Props) {
   const { installed, canPrompt, ios, install } = useInstallPrompt();
   const sound = useSyncExternalStore(subscribeSound, soundOn);
+  const notify = useNotifyPermission();
   const snap = game.snapshot;
   const meta = snap?.meta ?? null;
   const inGame = !!game.session;
@@ -433,6 +436,15 @@ export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onSt
               <LocateIcon size={16} /> Freigeben
             </button>
           )}
+        </div>
+      )}
+
+      {inGame && notify.perm === 'default' && (
+        <div className="gps-warning notify-ask">
+          <span>🔔 Benachrichtigungen erlauben, damit du neue Challenges und Fallen auch im Hintergrund mitbekommst.</span>
+          <button className="chip" onClick={() => void notify.ask()}>
+            Erlauben
+          </button>
         </div>
       )}
 
@@ -514,7 +526,7 @@ export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onSt
                     : geoStatus === 'searching'
                       ? 'Suche GPS-Signal …'
                       : geoStatus === 'denied'
-                        ? 'Zugriff verweigert – in den Browser-Einstellungen erlauben'
+                        ? `Zugriff verweigert – in den ${isNative ? 'Android' : 'Browser'}-Einstellungen erlauben`
                         : 'Noch nicht getestet'}
                 </small>
               </span>
@@ -525,12 +537,36 @@ export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onSt
               )}
             </li>
             <li>
+              <span className={`status-dot ${notify.perm === 'granted' ? 'ok' : notify.perm === 'denied' ? 'bad' : ''}`} />
+              <span className="check-text">
+                <strong>Benachrichtigungen</strong>
+                <small>
+                  {notify.perm === 'granted'
+                    ? 'An – du bekommst Challenges und Fallen auch im Hintergrund mit'
+                    : notify.perm === 'denied'
+                      ? `Blockiert – in den Einstellungen ${isNative ? 'von Android' : 'des Browsers'} erlauben`
+                      : notify.perm === 'unsupported'
+                        ? ios
+                          ? 'Auf dem iPhone erst nach «Zum Home-Bildschirm» möglich'
+                          : 'Dieser Browser kann keine Benachrichtigungen'
+                        : 'Für Challenges, Fallen und «Gefunden!»'}
+                </small>
+              </span>
+              {notify.perm === 'default' && (
+                <button className="chip" onClick={() => void notify.ask()}>
+                  🔔 Erlauben
+                </button>
+              )}
+            </li>
+            <li>
               <span className={`status-dot ${installed ? 'ok' : ''}`} />
               <span className="check-text">
                 <strong>Als App installieren</strong>
                 <small>
                   {installed
-                    ? 'Läuft als App'
+                    ? isNative
+                      ? 'Android-App · Standort läuft auch bei gesperrtem Bildschirm'
+                      : 'Läuft als App'
                     : ios
                       ? 'In Safari: Teilen-Symbol → «Zum Home-Bildschirm»'
                       : canPrompt

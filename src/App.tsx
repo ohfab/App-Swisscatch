@@ -17,6 +17,8 @@ import { DrawShow } from './components/game/DrawShow';
 import { ConfirmButton, TEAM_ICON, TEAM_LABEL, useCantonProps } from './components/game/common';
 import { inField, manualSpotRadius } from './game/content';
 import { buzz, play } from './lib/sound';
+import { notifyUser } from './lib/notify';
+import { isNative } from './lib/native';
 import { Onboarding } from './components/Onboarding';
 import { load, save } from './lib/storage';
 import type { Area } from './game/derive';
@@ -114,10 +116,11 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Im Spiel braucht es den Standort
+  // Im Spiel braucht es den Standort (in der Android-App auch bei gesperrtem Bildschirm)
   useEffect(() => {
     if (game.session && geo.status === 'off') geo.start();
   }, [game.session, geo.status, geo.start]);
+  useEffect(() => geo.setBackground(!!game.session), [game.session, geo.setBackground]);
 
   // Spielmeldungen als Hinweis anzeigen (mit Ton)
   const notice = game.snapshot?.notice;
@@ -125,6 +128,8 @@ export function App() {
     if (!notice) return;
     setToast(notice.text);
     if (notice.sound) play(notice.sound);
+    // App im Hintergrund: wichtige Meldungen als Systembenachrichtigung
+    if (notice.sound && notice.sound !== 'tick') void notifyUser('Spurlos', notice.text);
   }, [notice]);
 
   const cantonList = useCantonProps();
@@ -153,8 +158,14 @@ export function App() {
       setToast(myGameTeam === 'seeker' ? '🔍 Die Suche beginnt! Power-ups sind freigeschaltet.' : '🫣 Die Suche beginnt – jetzt gut versteckt bleiben!');
       play('go');
       buzz([150, 80, 150]);
+      void notifyUser('🔍 Die Suche beginnt!', myGameTeam === 'seeker' ? 'Power-ups sind freigeschaltet – los geht’s.' : 'Bleibt gut versteckt!');
     }
-    if (stageNow === 'ended' && gameDerived?.result?.winner && myGameTeam) play(gameDerived.result.winner === myGameTeam ? 'win' : 'lose');
+    if (stageNow === 'draw' && myGameTeam) void notifyUser('🎡 Die Teams sind ausgelost!', myGameTeam === 'seeker' ? 'Du bist Fänger.' : 'Du versteckst dich – such dir ein gutes Versteck.');
+    if (stageNow === 'ended' && gameDerived?.result?.winner && myGameTeam) {
+      const won = gameDerived.result.winner === myGameTeam;
+      play(won ? 'win' : 'lose');
+      void notifyUser(won ? '🏆 Gewonnen!' : 'Runde vorbei', won ? 'Dein Team hat die Runde gewonnen.' : 'Das andere Team hat gewonnen. Revanche?');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stageNow]);
   useEffect(() => {
@@ -162,6 +173,7 @@ export function App() {
       setToast(`🎯 Neue Challenge #${challengeNo}!`);
       play('challenge');
       buzz(200);
+      void notifyUser(`🎯 Neue Challenge #${challengeNo}`, gameDerived?.current?.def?.prompt ?? 'Öffne Spurlos, um sie zu lösen.', 'challenge');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [challengeNo]);
@@ -330,6 +342,34 @@ export function App() {
     },
     [panel, closePanel, spotPick],
   );
+
+  // Android-Zurück-Taste: erst Einführung, Versteckwahl oder Fenster schliessen, sonst App minimieren
+  const backRef = useRef<() => void>(() => undefined);
+  backRef.current = () => {
+    if (onboarding) {
+      setOnboarding(false);
+      save('onboarded.v1', true);
+    } else if (spotPick) {
+      setSpotPick(null);
+      setPanel({ type: 'game' });
+    } else if (panel) closePanel();
+    else void import('@capacitor/app').then(({ App: CapApp }) => CapApp.minimizeApp());
+  };
+  useEffect(() => {
+    if (!isNative) return;
+    let remove: (() => void) | undefined;
+    let gone = false;
+    void import('@capacitor/app').then(({ App: CapApp }) =>
+      CapApp.addListener('backButton', () => backRef.current()).then((h) => {
+        if (gone) void h.remove();
+        else remove = () => void h.remove();
+      }),
+    );
+    return () => {
+      gone = true;
+      remove?.();
+    };
+  }, []);
 
   const handleLongPress = useCallback(
     (p: LatLng) => {

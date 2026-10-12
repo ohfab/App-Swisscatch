@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dauerhafte Meldung, solange der Standort im Spiel im Hintergrund läuft -->
+    <string name="capacitor_background_geolocation_notification_channel_name">Standort im Spiel</string>
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_spurlos</string>
+    <string name="capacitor_background_geolocation_notification_color">#F9B07E</string>
+</resources>

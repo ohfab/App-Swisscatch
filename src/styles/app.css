@@ -120,6 +120,35 @@
   color: var(--muted);
 }
 
+.apk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--r-card);
+  border: var(--bw) solid var(--stroke);
+  background: color-mix(in srgb, var(--peach) 14%, var(--surface));
+}
+
+.apk-card > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.apk-card small {
+  color: var(--muted);
+}
+
+.apk-card .wide-btn {
+  text-decoration: none;
+}
+
+.apk-card .install-steps {
+  margin: 0;
+  font-size: 13.5px;
+}
+
 .install-steps {
   color: var(--fg);
   font-size: 14.5px;

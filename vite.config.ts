@@ -3,7 +3,9 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // Für GitHub Pages wird BASE_PATH auf "/<repo-name>/" gesetzt.
-const base = process.env.BASE_PATH ?? '/';
+// VITE_NATIVE=1: Build für die Android-App (Capacitor) – ohne Service Worker, Basis «/».
+const native = process.env.VITE_NATIVE === '1';
+const base = native ? '/' : (process.env.BASE_PATH ?? '/');
 
 // Version für die Download-Seite: Commit (auf GitHub) und Zeitpunkt des Builds
 const version = { sha: (process.env.GITHUB_SHA ?? 'lokal').slice(0, 7), time: new Date().toISOString() };
@@ -16,6 +18,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      disable: native,
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
@@ -37,6 +40,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,mjs,css,html,svg,png,geojson,woff2}'],
+        // Tippen auf eine Benachrichtigung öffnet die App
+        importScripts: ['sw-extra.js'],
         navigateFallback: 'index.html',
         runtimeCaching: [
           {

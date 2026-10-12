@@ -5,6 +5,7 @@ import { newCode, normalizeCode } from './crypto';
 import { DEFAULT_SETTINGS, type GameSettings, type Me } from './types';
 import { usePersistentState } from '../hooks/usePersistentState';
 import type { Position } from '../hooks/useGeolocation';
+import { PUBLIC_URL } from '../lib/native';
 
 interface Session {
   code: string;
@@ -27,7 +28,7 @@ const nullSnapshot = () => null;
 
 /** Einladungslink für ein Spiel */
 export function inviteLink(code: string): string {
-  return `${location.origin}${import.meta.env.BASE_URL}?spiel=${code}`;
+  return `${PUBLIC_URL}?spiel=${code}`;
 }
 
 /** Spielcode aus dem Einladungslink lesen (und aus der Adresszeile entfernen) */

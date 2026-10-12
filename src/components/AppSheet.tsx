@@ -3,9 +3,10 @@ import { BottomSheet } from './BottomSheet';
 import { Blob } from './Art';
 import { CheckIcon, CopyIcon, DownloadIcon, ShareIcon } from './Icons';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
+import { APK_URL, isNative, PUBLIC_URL } from '../lib/native';
 
 /** Fester Link zum Teilen: leitet auf die App mit geöffneter Download-Seite um */
-export const DOWNLOAD_URL = `${location.origin}${import.meta.env.BASE_URL}download/`;
+export const DOWNLOAD_URL = `${PUBLIC_URL}download/`;
 
 interface Props {
   onClose: () => void;
@@ -89,8 +90,40 @@ export function AppSheet({ onClose, onToast }: Props) {
     onToast((await copyText(DOWNLOAD_URL)) ? 'Link kopiert' : DOWNLOAD_URL);
   };
 
+  // Echte Android-App: GPS läuft auch bei gesperrtem Bildschirm weiter
+  const apk = (
+    <div className="apk-card">
+      <div>
+        <strong>Android-App (APK)</strong>
+        <small>Mit GPS im Hintergrund und Meldungen bei gesperrtem Bildschirm – ideal fürs Spiel.</small>
+      </div>
+      <a className="wide-btn start" href={APK_URL} download>
+        <DownloadIcon size={20} /> APK herunterladen
+      </a>
+      <ol className="how-to install-steps">
+        <li>APK öffnen, wenn der Download fertig ist.</li>
+        <li>
+          Fragt Android nach, <strong>«Unbekannte Apps installieren»</strong> für den Browser erlauben.
+        </li>
+        <li>
+          <strong>«Installieren»</strong> tippen. Beim Start Standort <strong>«Immer»</strong> bzw. «Bei Nutzung» und Mitteilungen erlauben.
+        </li>
+      </ol>
+    </div>
+  );
+
   let guide: ReactNode;
-  if (installed) {
+  if (isNative) {
+    guide = (
+      <div className="install-done">
+        <CheckIcon size={22} />
+        <div>
+          <strong>Läuft als Android-App</strong>
+          <small>Im Spiel läuft dein Standort auch bei gesperrtem Bildschirm weiter.</small>
+        </div>
+      </div>
+    );
+  } else if (installed) {
     guide = (
       <div className="install-done">
         <CheckIcon size={22} />
@@ -173,7 +206,7 @@ export function AppSheet({ onClose, onToast }: Props) {
   }
 
   return (
-    <BottomSheet title="App herunterladen" subtitle="Gratis für PC, Android und iPhone" label="App herunterladen" onClose={onClose}>
+    <BottomSheet title={isNative ? 'Über die App' : 'App herunterladen'} subtitle="Gratis für PC, Android und iPhone" label="App herunterladen" onClose={onClose}>
       <div className="app-hero">
         <img className="app-icon" src={`${import.meta.env.BASE_URL}icons/icon.svg`} alt="" width={76} height={76} />
         <div>
@@ -186,6 +219,13 @@ export function AppSheet({ onClose, onToast }: Props) {
 
       <h3 className="section-title">{installed ? 'Installiert' : canPrompt ? 'Ein Klick genügt' : 'So installierst du die App'}</h3>
       {guide}
+
+      {!isNative && platform !== 'ios' && (
+        <>
+          <h3 className="section-title">{platform === 'android' ? 'Noch besser: die Android-App' : 'Für Android-Handys'}</h3>
+          {apk}
+        </>
+      )}
 
       <h3 className="section-title">{platform === 'desktop' ? 'Aufs Handy holen' : 'Freunden schicken'}</h3>
       <div className="share-card">
@@ -209,23 +249,29 @@ export function AppSheet({ onClose, onToast }: Props) {
         <li>
           <span className="status-dot ok" />
           <span className="check-text">
-            <strong>Updates kommen von selbst</strong>
-            <small>Beim nächsten Öffnen läuft automatisch die neueste Version.</small>
+            <strong>{isNative ? 'Updates über die APK' : 'Updates kommen von selbst'}</strong>
+            <small>{isNative ? 'Neue Version: unten «Nach Updates suchen» und die APK drüber installieren – deine Daten bleiben.' : 'Beim nächsten Öffnen läuft automatisch die neueste Version.'}</small>
           </span>
         </li>
         <li>
           <span className="status-dot ok" />
           <span className="check-text">
-            <strong>Standort nur bei offener App</strong>
+            <strong>{isNative ? 'Standort nur während eines Spiels im Hintergrund' : 'Standort nur bei offener App'}</strong>
             <small>Im Spiel geht er nur an deine Mitspieler, verschlüsselt mit dem Spielcode.</small>
           </span>
         </li>
       </ul>
       <p className="fine-print app-version">
         Version {version} ·{' '}
-        <button className="link inline" onClick={() => void checkForUpdate(onToast)}>
-          Nach Updates suchen
-        </button>
+        {isNative ? (
+          <a className="link inline" href={APK_URL}>
+            Nach Updates suchen
+          </a>
+        ) : (
+          <button className="link inline" onClick={() => void checkForUpdate(onToast)}>
+            Nach Updates suchen
+          </button>
+        )}
       </p>
     </BottomSheet>
   );

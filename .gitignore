@@ -3,3 +3,6 @@ dist
 dev-dist
 *.local
 .DS_Store
+
+# Android-Projekt entsteht beim Build (npx cap add android)
+/android/

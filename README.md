@@ -1,9 +1,9 @@
 # Spurlos – das Versteckspiel quer durch die Schweiz
 
 Eine Karten-App für die ganze Schweiz mit einem **schweizweiten Versteckspiel für Freunde**.
-Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC.
+Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC, und als Android-App mit GPS im Hintergrund.
 
-**Live:** https://ohfab.github.io/App-Swisscatch/ · **App herunterladen:** https://ohfab.github.io/App-Swisscatch/download/
+**Live:** https://ohfab.github.io/App-Swisscatch/ · **App herunterladen:** https://ohfab.github.io/App-Swisscatch/download/ · **Android-App:** [Spurlos.apk](https://github.com/ohfab/App-Swisscatch/releases/latest/download/Spurlos.apk)
 
 <p>
   <img src="docs/screenshots/karte.jpg" width="200" alt="Strassenkarte von Bern">
@@ -99,12 +99,13 @@ Die Hälfte der Gruppe versteckt sich irgendwo in der Schweiz, die andere Hälft
 - **Quiz und Rätsel:** Fragen zu Kantonen sowie Schätz- und Vergleichsfragen zu Bergen, Seen, Pässen, Tunneln und Städten.
 - **Töne und Vibration:** Glücksrad, Countdown, Challenges, Fallen und Sieg haben eigene Töne. Sie lassen sich im Spiel-Menü mit 🔊 ausschalten.
 - **Einführung:** Beim ersten Start erklärt Blobi die App in vier kurzen Seiten.
+- **Benachrichtigungen:** Ist die App im Hintergrund, melden sich neue Challenges, Fallen, Chat-Nachrichten und «Gefunden!» als Systembenachrichtigung. Die Erlaubnis holt die Lobby einmal ab.
 
 **Fair Play:** Die App vertraut den Spielern. Sie zeigt jedem Team nur seine eigenen Informationen. Die Fänger sehen weder das Versteck noch die Standorte der Verstecker. Das Versteck erscheint erst am Ende der Runde.
 
-**Technik:** Die Geräte tauschen sich über einen öffentlichen MQTT-Broker aus, standardmässig `broker.emqx.io`. Alle Nachrichten und Fotos sind mit einem Schlüssel aus dem Spielcode verschlüsselt (AES-GCM). Der Broker sieht deshalb weder Namen noch Standorte. Der Host verwaltet Regeln und Auslosung. Jedes Gerät schreibt nur seine eigenen Aktionen, den Spielstand rechnet jedes Gerät gleich daraus aus. Damit Glücksrad, Countdown und Challenges überall gleichzeitig laufen, gleichen alle Geräte ihre Uhr mit dem Host ab (wie bei NTP), auch wenn eine Geräteuhr ein paar Sekunden falsch geht. Verlässt der Host das Spiel, übernimmt automatisch der Spieler, der am längsten dabei ist.
+**Technik:** Die Geräte tauschen sich über öffentliche MQTT-Broker aus, gleichzeitig über `broker.emqx.io` und `broker.hivemq.com`. Jede Nachricht geht an beide; fällt einer aus, läuft das Spiel über den anderen weiter, ohne Konto und ohne eigenen Server. Alle Nachrichten und Fotos sind mit einem Schlüssel aus dem Spielcode verschlüsselt (AES-GCM). Der Broker sieht deshalb weder Namen noch Standorte. Der Host verwaltet Regeln und Auslosung. Jedes Gerät schreibt nur seine eigenen Aktionen, den Spielstand rechnet jedes Gerät gleich daraus aus. Damit Glücksrad, Countdown und Challenges überall gleichzeitig laufen, gleichen alle Geräte ihre Uhr mit dem Host ab (wie bei NTP), auch wenn eine Geräteuhr ein paar Sekunden falsch geht. Verlässt der Host das Spiel, übernimmt automatisch der Spieler, der am längsten dabei ist.
 
-**Eigener Broker:** Beim Build `VITE_MQTT_URL=wss://…` setzen oder die App einmal mit `?broker=wss://…` öffnen.
+**Eigener Broker:** Beim Build `VITE_MQTT_URL=wss://…` setzen oder die App einmal mit `?broker=wss://…` öffnen. Mehrere Broker durch Kommas trennen.
 
 **Lokal testen:** `npm run broker` startet einen Broker auf `ws://127.0.0.1:1884`. Die App dann mit `?broker=ws://127.0.0.1:1884` öffnen. Mit der Versteckzeit «1 Min (Test)» und Challenges «jede Minute» lässt sich eine Runde in wenigen Minuten durchspielen.
 
@@ -117,6 +118,17 @@ Die App läuft auch im Browser am Computer, die Karte nutzt dann den ganzen Bild
 3. Die App startet danach in einem eigenen Fenster und erscheint im Startmenü bzw. im Dock.
 
 Am PC ist der Standort meist ungenau (WLAN-Ortung). Zum Spielen unterwegs eignet sich deshalb das Handy.
+
+## Android-App
+
+Web-Apps senden den Standort nur, solange sie offen sind. Die Android-App läuft mit gesperrtem Bildschirm weiter: Während eines Spiels zeigt sie eine dauerhafte Meldung «Spurlos läuft» und schickt den Standort weiter an die Mitspieler. Challenges, Fallen und Chat kommen als Benachrichtigung.
+
+- **Download:** [Spurlos.apk](https://github.com/ohfab/App-Swisscatch/releases/latest/download/Spurlos.apk), auch über die Seite «App herunterladen». Beim ersten Mal fragt Android, ob der Browser «unbekannte Apps» installieren darf.
+- **Updates:** Neue Versionen einfach über die alte installieren, gespeicherte Pins und Einstellungen bleiben.
+- **Build:** `.github/workflows/android.yml` baut die APK bei jedem Push und legt sie im Release `android-latest` ab. Lokal geht es mit `npm run android` (Java 21 und Android SDK nötig, `ANDROID_HOME` gesetzt).
+- **Technik:** [Capacitor](https://capacitorjs.com) verpackt dieselbe Web-App (`VITE_NATIVE=1`, ohne Service Worker). Das Android-Projekt `android/` entsteht bei jedem Build neu; `scripts/android-prepare.mjs` legt Symbol, Startbild und Texte aus `native/android/res` darüber und setzt Version und Signatur. GPS im Hintergrund über `@capacitor-community/background-geolocation`, Benachrichtigungen über `@capacitor/local-notifications`.
+- **Signatur:** Damit Updates sich drüber installieren lassen, braucht jede Version denselben Schlüssel. Er liegt in `native/android/spurlos.jks` (Passwort `spurlos-public`). Das ist für eine Freundes-App bequem, heisst aber: Jeder mit dem Repo könnte eine APK mit derselben Signatur bauen. Wer das nicht will, legt einen eigenen Schlüssel als GitHub-Secret an und gibt ihn dem Workflow über `ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` und `ANDROID_KEY_PASSWORD` mit. Danach muss die App einmal neu installiert werden.
+- **iPhone:** Eine iOS-App bräuchte ein Apple-Entwicklerkonto. Auf dem iPhone läuft Spurlos als Web-App vom Home-Bildschirm.
 
 ## Loslegen
 
@@ -167,14 +179,20 @@ src/
     content.ts            Power-ups, Fallen, Challenges, Quiz und Rätsel
     facts.ts              Fakten zum Versteck (Gemeinde, Einwohner, Höhe …)
     crypto.ts             Verschlüsselung mit dem Spielcode
-  hooks/                  Standort, Pins, Installation, Online-Status
+  hooks/                  Standort (im Browser und in der Android-App), Pins, Installation, Online-Status
   lib/
     config.ts             Kartenebenen und Grenzen
     geoadmin.ts           Suche und Höhenabfrage (api3.geo.admin.ch)
     transport.ts          Haltestellen, Abfahrten und Verbindungen (search.ch)
     geo.ts                Distanzen, LV95-Umrechnung, Punkt-in-Polygon
+    notify.ts             Systembenachrichtigungen (Browser und Android)
+    sound.ts              Spieltöne, im Browser erzeugt
+    native.ts             Erkennung der Android-App, öffentliche Adressen
 public/data/              Kantons- und Landesgrenzen als GeoJSON
+native/android/           Symbol, Startbild, Texte und Schlüssel der Android-App
+capacitor.config.ts       Einstellungen der Android-App
 scripts/build-geodata.mjs erzeugt public/data aus dem Paket swiss-maps
+scripts/android-prepare.mjs passt das erzeugte Android-Projekt an
 ```
 
 Die Kantonsdaten lassen sich mit `npm run geodata` neu erzeugen, etwa nach einer Gemeindefusion.
@@ -190,11 +208,11 @@ Die Kantonsdaten lassen sich mit `npm run geodata` neu erzeugen, etwa nach einer
 | Gemeinde am Versteck | swisstopo, Gemeindegrenzen über api3.geo.admin.ch | Freie Nutzung mit Quellenangabe |
 | Einwohnerzahl und Amtssprache der Gemeinde | [Wikidata](https://www.wikidata.org) | CC0 |
 | Schrift Outfit | [Google Fonts](https://fonts.google.com/specimen/Outfit) über Fontsource | SIL Open Font License |
-| Spiel-Nachrichten | [EMQX Public Broker](https://www.emqx.com/en/mqtt/public-mqtt5-broker) | Gratis Testbroker ohne Garantie; Inhalte verschlüsselt |
+| Spiel-Nachrichten | [EMQX Public Broker](https://www.emqx.com/en/mqtt/public-mqtt5-broker) und [HiveMQ Public Broker](https://www.hivemq.com/mqtt/public-mqtt-broker/) | Gratis Testbroker ohne Garantie, parallel genutzt; Inhalte verschlüsselt |
 
 ## Nächste Schritte
 
-1. **Standort im Hintergrund:** Web-Apps senden den Standort nur, solange sie offen sind. Für echtes Hintergrund-Tracking lässt sich dieselbe App mit [Capacitor](https://capacitorjs.com) als native iOS- und Android-App verpacken.
-2. **Eigener Broker:** Für mehr Verlässlichkeit ein eigener, kostenloser Cloud-Broker (z.B. HiveMQ Cloud oder EMQX Serverless) statt des öffentlichen Testbrokers.
-3. **Minigames:** weitere Wege zu Punkten für beide Teams, z.B. Fahrplan-Aufgaben oder Schätzfragen unterwegs.
-4. **Mehr Power-ups und Fallen:** z.B. Bahnlinie, Seen, Höhenlinien oder eine Falle, die eine Fänger-Frage falsch beantwortet.
+1. **iPhone-App:** Mit einem Apple-Entwicklerkonto liesse sich dieselbe Capacitor-App auch für iOS bauen, mit Standort im Hintergrund.
+2. **Eigener Broker:** Für noch mehr Verlässlichkeit ein eigener, kostenloser Cloud-Broker (z.B. HiveMQ Cloud oder EMQX Serverless) zusätzlich zu den öffentlichen.
+3. **Minigames:** weitere Wege zu Punkten für beide Teams, z.B. Fahrplan-Aufgaben unterwegs.
+4. **Mehr Fallen:** z.B. eine Falle, die eine Fänger-Frage falsch beantwortet.

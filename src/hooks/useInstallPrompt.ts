@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isNative } from '../lib/native';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -29,7 +30,7 @@ const browser: Browser = /firefox|fxios/i.test(ua)
  * für alle Komponenten, auch solche, die erst später erscheinen.
  */
 let deferred: BeforeInstallPromptEvent | null = null;
-let installed = isStandalone();
+let installed = isNative || isStandalone();
 let snapshot = { canPrompt: false, installed };
 const listeners = new Set<() => void>();
 

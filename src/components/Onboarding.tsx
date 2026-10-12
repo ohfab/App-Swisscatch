@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Blob, Drips } from './Art';
 import { MapIcon, PinIcon, TrainIcon } from './Icons';
+import { isNative } from '../lib/native';
 
 interface Slide {
   art: ReactNode;
@@ -8,7 +9,7 @@ interface Slide {
   text: string;
 }
 
-const SLIDES: Slide[] = [
+const ALL_SLIDES: Slide[] = [
   {
     art: <Blob size={170} color="ink" />,
     title: (
@@ -64,6 +65,9 @@ const SLIDES: Slide[] = [
   },
 ];
 
+// In der Android-App ist die App schon da – die Seite «Hol dir die App» entfällt
+const SLIDES = isNative ? ALL_SLIDES.slice(0, -1) : ALL_SLIDES;
+
 export function Onboarding({ onDone, onOpenApp }: { onDone: () => void; onOpenApp: () => void }) {
   const [i, setI] = useState(0);
   const start = useRef<number | null>(null);
@@ -95,7 +99,7 @@ export function Onboarding({ onDone, onOpenApp }: { onDone: () => void; onOpenAp
         <div className="ob-art">{slide.art}</div>
         <h2 className="ob-title">{slide.title}</h2>
         <p className="ob-text">{slide.text}</p>
-        {last && (
+        {last && !isNative && (
           <button
             className="wide-btn secondary ob-app-btn"
             onClick={() => {

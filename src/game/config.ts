@@ -1,20 +1,29 @@
 import { load, save } from '../lib/storage';
 
 /**
- * Öffentlicher MQTT-Broker (gratis, ohne Konto). Alle Daten sind mit dem Spielcode
- * verschlüsselt. Für einen eigenen Broker beim Build VITE_MQTT_URL setzen
- * oder die App einmal mit ?broker=wss://… öffnen.
+ * Öffentliche MQTT-Broker (gratis, ohne Konto). Die App verbindet sich mit beiden
+ * gleichzeitig und sendet alles an beide: fällt einer aus, läuft das Spiel über den
+ * anderen weiter. Alle Daten sind mit dem Spielcode verschlüsselt.
+ * Eigene Broker: beim Build VITE_MQTT_URL setzen (mehrere mit Komma getrennt)
+ * oder die App einmal mit ?broker=wss://…[,wss://…] öffnen.
  */
-export const DEFAULT_BROKER = (import.meta.env.VITE_MQTT_URL as string | undefined) ?? 'wss://broker.emqx.io:8084/mqtt';
+const splitList = (v: string) =>
+  v
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
 
-export function brokerUrl(): string {
+export const DEFAULT_BROKERS = splitList((import.meta.env.VITE_MQTT_URL as string | undefined) ?? 'wss://broker.emqx.io:8084/mqtt,wss://broker.hivemq.com:8884/mqtt');
+
+export function brokerUrls(): string[] {
   try {
     const fromUrl = new URLSearchParams(location.search).get('broker');
     if (fromUrl) save('mqtt.url', fromUrl);
   } catch {
     // ohne URL-Zugriff einfach weiter
   }
-  return load<string | null>('mqtt.url', null) ?? DEFAULT_BROKER;
+  const saved = load<string | null>('mqtt.url', null);
+  return saved ? splitList(saved) : DEFAULT_BROKERS;
 }
 
 export const TOPIC_PREFIX = 'swisscatch/v1';
