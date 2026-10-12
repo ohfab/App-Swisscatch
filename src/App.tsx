@@ -1,30 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapView } from './components/MapView';
 import { SearchBar } from './components/SearchBar';
 import { TabBar, type Tab } from './components/TabBar';
-import { LayerSheet } from './components/LayerSheet';
-import { AppSheet } from './components/AppSheet';
-import { PlaceSheet } from './components/PlaceSheet';
-import { CantonSheet } from './components/CantonSheet';
-import { PinsSheet } from './components/PinsSheet';
-import { GameSheet } from './components/GameSheet';
-import { RouteSheet, emptyPlan, ME, type RoutePlan } from './components/RouteSheet';
+import { emptyPlan, ME, type RoutePlan } from './lib/routePlan';
 import { useGame, takeInviteCode } from './game/useGame';
 import { formatClock, isOnline } from './game/rules';
 import { derive } from './game/derive';
-import { DrawShow } from './components/game/DrawShow';
 import { ConfirmButton, TEAM_ICON, TEAM_LABEL, useCantonProps } from './components/game/common';
 import { inField, manualSpotRadius } from './game/content';
 import { buzz, play } from './lib/sound';
 import { notifyUser } from './lib/notify';
 import { isNative } from './lib/native';
 import { Onboarding } from './components/Onboarding';
-import { Tour } from './components/Tour';
 import { Ghost } from './components/Art';
 import { BadgePopup } from './components/Geisti';
-import { ProfileSheet } from './components/ProfileSheet';
-import { levelOf, markTour, recordRound, setPins, useStats, visitCanton, xpOf } from './lib/stats';
+import { levelOf, markTour, recordRound, setPins, streakOf, today, useStats, visitCanton, xpOf } from './lib/stats';
 import { load, save } from './lib/storage';
 import type { Area } from './game/derive';
 import { useInstallPrompt } from './hooks/useInstallPrompt';
@@ -43,6 +34,39 @@ import { PIN_COLORS, usePins, type Pin } from './hooks/usePins';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useOnline } from './hooks/useOnline';
 
+// Fenster laden erst, wenn sie gebraucht werden (schnellerer Start); im Leerlauf schon vorladen
+const loaders = {
+  layer: () => import('./components/LayerSheet'),
+  app: () => import('./components/AppSheet'),
+  place: () => import('./components/PlaceSheet'),
+  canton: () => import('./components/CantonSheet'),
+  pins: () => import('./components/PinsSheet'),
+  game: () => import('./components/GameSheet'),
+  route: () => import('./components/RouteSheet'),
+  profile: () => import('./components/ProfileSheet'),
+  draw: () => import('./components/game/DrawShow'),
+  tour: () => import('./components/Tour'),
+  quiz: () => import('./components/QuizSheet'),
+};
+const LayerSheet = lazy(() => loaders.layer().then((m) => ({ default: m.LayerSheet })));
+const AppSheet = lazy(() => loaders.app().then((m) => ({ default: m.AppSheet })));
+const PlaceSheet = lazy(() => loaders.place().then((m) => ({ default: m.PlaceSheet })));
+const CantonSheet = lazy(() => loaders.canton().then((m) => ({ default: m.CantonSheet })));
+const PinsSheet = lazy(() => loaders.pins().then((m) => ({ default: m.PinsSheet })));
+const GameSheet = lazy(() => loaders.game().then((m) => ({ default: m.GameSheet })));
+const RouteSheet = lazy(() => loaders.route().then((m) => ({ default: m.RouteSheet })));
+const ProfileSheet = lazy(() => loaders.profile().then((m) => ({ default: m.ProfileSheet })));
+const DrawShow = lazy(() => loaders.draw().then((m) => ({ default: m.DrawShow })));
+const Tour = lazy(() => loaders.tour().then((m) => ({ default: m.Tour })));
+const QuizSheet = lazy(() => loaders.quiz().then((m) => ({ default: m.QuizSheet })));
+
+function prefetchSheets() {
+  const run = () => Object.values(loaders).forEach((load) => void load().catch(() => undefined));
+  const idle = (window as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (idle) idle(run, { timeout: 4000 });
+  else setTimeout(run, 2500);
+}
+
 type Panel =
   | { type: 'layers' }
   | { type: 'place'; place: Place }
@@ -51,7 +75,8 @@ type Panel =
   | { type: 'pins' }
   | { type: 'game' }
   | { type: 'app' }
-  | { type: 'profile' };
+  | { type: 'profile' }
+  | { type: 'quiz' };
 
 const DEFAULT_OVERLAYS: Record<OverlayId, boolean> = { cantons: true, transit: false, hiking: false };
 
@@ -107,23 +132,34 @@ export function App() {
   const [tour, setTour] = useState(false);
   const stats = useStats();
   const level = levelOf(xpOf(stats)).n;
+  const todayKey = today();
+  const streak = streakOf(stats);
+  const [quizChipDay, setQuizChipDay] = usePersistentState<string>('quizchip.v1', '');
   const gameMeta = game.snapshot?.meta ?? null;
   // Spieluhr: eigene Uhr plus Versatz zur Uhr des Hosts (alle Geräte gleichzeitig)
   const clockOffset = game.snapshot?.clockOffset ?? 0;
   const gameNow = useNow(1000, !!gameMeta) + clockOffset;
 
-  // Einladungslink geöffnet: direkt den Spiel-Tab zeigen; Download-Link (?app): App-Seite zeigen
+  // Einladungslink: direkt den Spiel-Tab zeigen. Download-Link (?app), Tagesquiz (?quiz) und
+  // Schnellzugriffe vom App-Symbol (?tab=game|route|pins|profile) öffnen das passende Fenster.
   useEffect(() => {
     const url = new URL(location.href);
-    const wantsApp = url.searchParams.has('app');
-    if (wantsApp) {
-      url.searchParams.delete('app');
-      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
-    }
+    const tab = url.searchParams.get('tab');
+    const wanted: Panel | null = url.searchParams.has('app')
+      ? { type: 'app' }
+      : url.searchParams.has('quiz')
+        ? { type: 'quiz' }
+        : tab === 'game' || tab === 'route' || tab === 'pins' || tab === 'profile'
+          ? { type: tab }
+          : null;
+    for (const k of ['app', 'quiz', 'tab']) url.searchParams.delete(k);
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
     if (inviteCode && !game.session) setPanel({ type: 'game' });
-    else if (wantsApp) setPanel({ type: 'app' });
+    else if (wanted) setPanel(wanted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(prefetchSheets, []);
 
   // Im Spiel braucht es den Standort (in der Android-App auch bei gesperrtem Bildschirm)
   useEffect(() => {
@@ -181,6 +217,7 @@ export function App() {
         const n = (kind: string) => mine.filter((a) => a.kind === kind).length;
         recordRound({
           key: `${snap.code}:${gameMeta.round}`,
+          name: gameMeta.name,
           won,
           team: myGameTeam,
           powerups: n('powerup'),
@@ -239,6 +276,8 @@ export function App() {
 
   const validBasemap = BASEMAPS.some((b) => b.id === basemap) ? basemap : DEFAULT_BASEMAP;
   const shownRoute = plan.result?.connections.find((c) => c.id === plan.selectedId) ?? null;
+  // Erinnerung ans Tagesquiz auf der Karte (einmal pro Tag wegklickbar)
+  const showQuizChip = stats.quiz[todayKey] === undefined && quizChipDay !== todayKey && !panel && !shownRoute && !gameMeta && !onboarding && !tour;
   const updatePlan = useCallback((u: (p: RoutePlan) => RoutePlan) => setPlan(u), []);
   const startGps = useCallback(() => geo.start(), [geo.start]);
 
@@ -405,17 +444,22 @@ export function App() {
   };
   useEffect(() => {
     if (!isNative) return;
-    let remove: (() => void) | undefined;
+    const removers: (() => void)[] = [];
     let gone = false;
-    void import('@capacitor/app').then(({ App: CapApp }) =>
-      CapApp.addListener('backButton', () => backRef.current()).then((h) => {
-        if (gone) void h.remove();
-        else remove = () => void h.remove();
-      }),
+    const keep = (h: { remove: () => Promise<void> }) => {
+      if (gone) void h.remove();
+      else removers.push(() => void h.remove());
+    };
+    void import('@capacitor/app').then(({ App: CapApp }) => CapApp.addListener('backButton', () => backRef.current()).then(keep));
+    // Tipp auf die Quiz-Erinnerung öffnet das Tagesquiz
+    void import('@capacitor/local-notifications').then(({ LocalNotifications }) =>
+      LocalNotifications.addListener('localNotificationActionPerformed', (e) => {
+        if (e.notification.extra?.url === '?quiz') setPanel({ type: 'quiz' });
+      }).then(keep),
     );
     return () => {
       gone = true;
-      remove?.();
+      removers.forEach((r) => r());
     };
   }, []);
 
@@ -579,7 +623,20 @@ export function App() {
             </button>
           </div>
         )}
-        {!hintSeen && !panel && !shownRoute && !gameMeta && !installPrompt.canPrompt && (
+        {showQuizChip && (
+          <div className="hint quiz-chip">
+            <button className="quiz-chip-main" onClick={() => setPanel({ type: 'quiz' })}>
+              <Ghost size={30} mood="think" shadow={false} />
+              <span>
+                <strong>Geistis Tagesquiz</strong> wartet{streak > 0 ? ` · 🔥 ${streak}` : ''}
+              </span>
+            </button>
+            <button className="icon-btn subtle" aria-label="Heute nicht mehr zeigen" onClick={() => setQuizChipDay(todayKey)}>
+              <CloseIcon size={16} />
+            </button>
+          </div>
+        )}
+        {!hintSeen && !showQuizChip && !panel && !shownRoute && !gameMeta && !installPrompt.canPrompt && (
           <div className="hint">
             <span>
               <strong>Tipp:</strong> {finePointer ? 'Rechtsklick auf die Karte' : 'Lange auf die Karte drücken'} zeigt
@@ -623,187 +680,191 @@ export function App() {
         </button>
       </div>
 
-      {panel?.type === 'layers' && (
-        <LayerSheet
-          basemap={validBasemap}
-          overlays={overlays}
-          onBasemap={setBasemap}
-          onToggleOverlay={(id) => setOverlays((o) => ({ ...DEFAULT_OVERLAYS, ...o, [id]: !overlays[id] }))}
-          onOpenApp={() => setPanel({ type: 'app' })}
-          onClose={closePanel}
-        />
-      )}
-      {spotPick && (
-        <>
-          <div className="pick-cross" aria-hidden="true">
-            <span />
-          </div>
-          <div className="pick-card" role="dialog" aria-label="Versteck auf der Karte wählen">
-            {(() => {
-              const dist = pickCenter && spotPick.origin ? distanceMeters(pickCenter, spotPick.origin) : null;
-              const tooFar = dist !== null && spotPick.maxM !== null && dist > spotPick.maxM;
-              return (
-                <>
-                  <strong>🏠 Versteck auf der Karte wählen</strong>
-                  <p className={tooFar ? 'bad' : ''}>
-                    {!spotPick.origin
-                      ? 'Ohne GPS: Schieb die Karte, bis das Kreuz auf deinem Versteck liegt. Die Fänger sehen, dass es von Hand gesetzt ist.'
-                      : tooFar
-                        ? `Zu weit weg – höchstens ${formatDistance(spotPick.maxM!)} von deinem GPS-Standort.`
-                        : `Schieb die Karte, bis das Kreuz auf deinem Versteck liegt · ${formatDistance(dist ?? 0)} vom GPS-Standort`}
-                  </p>
-                  <div className="pick-actions">
-                    <button
-                      className="wide-btn secondary"
-                      onClick={() => {
-                        setSpotPick(null);
-                        setPanel({ type: 'game' });
-                      }}
-                    >
-                      Abbrechen
-                    </button>
-                    <ConfirmButton className="wide-btn start" disabled={!pickCenter || tooFar || pickBusy} confirm="Endgültig hier?" onConfirm={() => void confirmSpotPick()}>
-                      {pickBusy ? 'Ermittle Ort …' : 'Hier einloggen'}
-                    </ConfirmButton>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </>
-      )}
-      {panel?.type === 'app' && <AppSheet onClose={closePanel} onToast={setToast} />}
-      {panel?.type === 'profile' && (
-        <ProfileSheet
-          name={game.profile.name}
-          onName={game.setName}
-          onClose={closePanel}
-          onTour={startTour}
-          onIntro={() => {
-            closePanel();
-            setOnboarding(true);
-          }}
-          onOpenApp={() => setPanel({ type: 'app' })}
-        />
-      )}
-      {panel?.type === 'place' && (
-        <PlaceSheet
-          key={panel.place.key}
-          place={panel.place}
-          pin={currentPin}
-          position={geo.position}
-          stations={stations}
-          openStationId={openStationId}
-          onStations={(list) => handleStations(list, panel.place)}
-          onToggleStation={(s) => setOpenStationId((id) => (id === s.id ? null : s.id))}
-          onSavePin={(name) => {
-            const pin = addPin({
-              name: name || `Pin ${pins.length + 1}`,
-              lat: panel.place.lat,
-              lng: panel.place.lng,
-              color: PIN_COLORS[pins.length % PIN_COLORS.length]!,
-            });
-            setPanel({ type: 'place', place: { ...panel.place, pinId: pin.id, source: 'pin' } });
-            setToast('Pin gespeichert');
-          }}
-          onUpdatePin={updatePin}
-          onRemovePin={(id) => {
-            removePin(id);
-            closePanel();
-          }}
-          onShowCanton={(canton) => setPanel({ type: 'canton', canton })}
-          onRoute={(title) => {
-            setPlan((p) => ({
-              ...p,
-              from: ME,
-              to: { kind: 'point', label: title, lat: panel.place.lat, lng: panel.place.lng },
-              result: null,
-              selectedId: null,
-            }));
-            setPanel({ type: 'route' });
-            setStations([]);
-          }}
-          onToast={setToast}
-          onClose={closePanel}
-        />
-      )}
-      {panel?.type === 'canton' && (
-        <CantonSheet
-          canton={panel.canton}
-          onZoom={() => fit(L.geoJSON(panel.canton).getBounds(), 12)}
-          onNeighbor={(abbr) =>
-            loadCantons().then((all) => {
-              const next = all.features.find((f) => f.properties.abbr === abbr);
-              if (!next) return;
-              setPanel({ type: 'canton', canton: next });
-              fit(L.geoJSON(next).getBounds(), 12);
-            })
-          }
-          onClose={closePanel}
-        />
-      )}
-      {panel?.type === 'route' && (
-        <RouteSheet
-          plan={plan}
-          onPlan={updatePlan}
-          position={geo.position}
-          geoStatus={geo.status}
-          onStartGps={startGps}
-          onFit={fit}
-          onClose={closePanel}
-        />
-      )}
-      {panel?.type === 'pins' && (
-        <PinsSheet
-          pins={pins}
-          position={geo.position}
-          onSelect={handlePinClick}
-          onAddAtPosition={() => {
-            if (!geo.position) return;
-            openPlace({ lat: geo.position.lat, lng: geo.position.lng, source: 'me' });
-          }}
-          onClose={closePanel}
-        />
-      )}
-      {panel?.type === 'game' && (
-        <GameSheet
-          game={game}
-          d={gameDerived}
-          now={gameNow}
-          prefillCode={inviteCode}
-          geoStatus={geo.status}
-          position={geo.position}
-          onStartGps={() => {
-            geo.start();
-            setFollow(true);
-          }}
-          onShowPoint={(lat, lng) => focus({ lat, lng }, 16)}
-          onToast={setToast}
-          onOpenApp={() => setPanel({ type: 'app' })}
-          onPickSpot={startSpotPick}
-          onClose={closePanel}
-        />
-      )}
-      {openClaim && game.snapshot && (
-        <div className="dialog-backdrop" role="alertdialog" aria-label="Gefunden bestätigen">
-          <div className="dialog">
-            <span className="dialog-emoji">🎯</span>
-            <h2>{game.snapshot.players[openClaim.by]?.name ?? 'Ein Fänger'} sagt: Gefunden!</h2>
-            <p>Hat euch die Person wirklich entdeckt? Bestätigt nur, wenn es stimmt – dann gewinnen die Fänger.</p>
-            <div className="dialog-actions">
-              <button className="wide-btn secondary" onClick={() => setDismissedClaims((l) => [...l, openClaim.id])}>
-                Stimmt nicht
-              </button>
-              <button className="wide-btn" onClick={() => game.client?.addAction({ kind: 'confirm-found', claimId: openClaim.id })}>
-                Ja, gefunden
-              </button>
+      <Suspense fallback={null}>
+        {panel?.type === 'layers' && (
+          <LayerSheet
+            basemap={validBasemap}
+            overlays={overlays}
+            onBasemap={setBasemap}
+            onToggleOverlay={(id) => setOverlays((o) => ({ ...DEFAULT_OVERLAYS, ...o, [id]: !overlays[id] }))}
+            onOpenApp={() => setPanel({ type: 'app' })}
+            onClose={closePanel}
+          />
+        )}
+        {spotPick && (
+          <>
+            <div className="pick-cross" aria-hidden="true">
+              <span />
+            </div>
+            <div className="pick-card" role="dialog" aria-label="Versteck auf der Karte wählen">
+              {(() => {
+                const dist = pickCenter && spotPick.origin ? distanceMeters(pickCenter, spotPick.origin) : null;
+                const tooFar = dist !== null && spotPick.maxM !== null && dist > spotPick.maxM;
+                return (
+                  <>
+                    <strong>🏠 Versteck auf der Karte wählen</strong>
+                    <p className={tooFar ? 'bad' : ''}>
+                      {!spotPick.origin
+                        ? 'Ohne GPS: Schieb die Karte, bis das Kreuz auf deinem Versteck liegt. Die Fänger sehen, dass es von Hand gesetzt ist.'
+                        : tooFar
+                          ? `Zu weit weg – höchstens ${formatDistance(spotPick.maxM!)} von deinem GPS-Standort.`
+                          : `Schieb die Karte, bis das Kreuz auf deinem Versteck liegt · ${formatDistance(dist ?? 0)} vom GPS-Standort`}
+                    </p>
+                    <div className="pick-actions">
+                      <button
+                        className="wide-btn secondary"
+                        onClick={() => {
+                          setSpotPick(null);
+                          setPanel({ type: 'game' });
+                        }}
+                      >
+                        Abbrechen
+                      </button>
+                      <ConfirmButton className="wide-btn start" disabled={!pickCenter || tooFar || pickBusy} confirm="Endgültig hier?" onConfirm={() => void confirmSpotPick()}>
+                        {pickBusy ? 'Ermittle Ort …' : 'Hier einloggen'}
+                      </ConfirmButton>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </>
+        )}
+        {panel?.type === 'app' && <AppSheet onClose={closePanel} onToast={setToast} />}
+        {panel?.type === 'quiz' && <QuizSheet onClose={closePanel} />}
+        {panel?.type === 'profile' && (
+          <ProfileSheet
+            name={game.profile.name}
+            onName={game.setName}
+            onClose={closePanel}
+            onTour={startTour}
+          onQuiz={() => setPanel({ type: 'quiz' })}
+            onIntro={() => {
+              closePanel();
+              setOnboarding(true);
+            }}
+            onOpenApp={() => setPanel({ type: 'app' })}
+          />
+        )}
+        {panel?.type === 'place' && (
+          <PlaceSheet
+            key={panel.place.key}
+            place={panel.place}
+            pin={currentPin}
+            position={geo.position}
+            stations={stations}
+            openStationId={openStationId}
+            onStations={(list) => handleStations(list, panel.place)}
+            onToggleStation={(s) => setOpenStationId((id) => (id === s.id ? null : s.id))}
+            onSavePin={(name) => {
+              const pin = addPin({
+                name: name || `Pin ${pins.length + 1}`,
+                lat: panel.place.lat,
+                lng: panel.place.lng,
+                color: PIN_COLORS[pins.length % PIN_COLORS.length]!,
+              });
+              setPanel({ type: 'place', place: { ...panel.place, pinId: pin.id, source: 'pin' } });
+              setToast('Pin gespeichert');
+            }}
+            onUpdatePin={updatePin}
+            onRemovePin={(id) => {
+              removePin(id);
+              closePanel();
+            }}
+            onShowCanton={(canton) => setPanel({ type: 'canton', canton })}
+            onRoute={(title) => {
+              setPlan((p) => ({
+                ...p,
+                from: ME,
+                to: { kind: 'point', label: title, lat: panel.place.lat, lng: panel.place.lng },
+                result: null,
+                selectedId: null,
+              }));
+              setPanel({ type: 'route' });
+              setStations([]);
+            }}
+            onToast={setToast}
+            onClose={closePanel}
+          />
+        )}
+        {panel?.type === 'canton' && (
+          <CantonSheet
+            canton={panel.canton}
+            onZoom={() => fit(L.geoJSON(panel.canton).getBounds(), 12)}
+            onNeighbor={(abbr) =>
+              loadCantons().then((all) => {
+                const next = all.features.find((f) => f.properties.abbr === abbr);
+                if (!next) return;
+                setPanel({ type: 'canton', canton: next });
+                fit(L.geoJSON(next).getBounds(), 12);
+              })
+            }
+            onClose={closePanel}
+          />
+        )}
+        {panel?.type === 'route' && (
+          <RouteSheet
+            plan={plan}
+            onPlan={updatePlan}
+            position={geo.position}
+            geoStatus={geo.status}
+            onStartGps={startGps}
+            onFit={fit}
+            onClose={closePanel}
+          />
+        )}
+        {panel?.type === 'pins' && (
+          <PinsSheet
+            pins={pins}
+            position={geo.position}
+            onSelect={handlePinClick}
+            onAddAtPosition={() => {
+              if (!geo.position) return;
+              openPlace({ lat: geo.position.lat, lng: geo.position.lng, source: 'me' });
+            }}
+            onClose={closePanel}
+          />
+        )}
+        {panel?.type === 'game' && (
+          <GameSheet
+            game={game}
+            d={gameDerived}
+            now={gameNow}
+            prefillCode={inviteCode}
+            geoStatus={geo.status}
+            position={geo.position}
+            onStartGps={() => {
+              geo.start();
+              setFollow(true);
+            }}
+            onShowPoint={(lat, lng) => focus({ lat, lng }, 16)}
+            onToast={setToast}
+            onOpenApp={() => setPanel({ type: 'app' })}
+            onPickSpot={startSpotPick}
+            onClose={closePanel}
+          />
+        )}
+        {openClaim && game.snapshot && (
+          <div className="dialog-backdrop" role="alertdialog" aria-label="Gefunden bestätigen">
+            <div className="dialog">
+              <span className="dialog-emoji">🎯</span>
+              <h2>{game.snapshot.players[openClaim.by]?.name ?? 'Ein Fänger'} sagt: Gefunden!</h2>
+              <p>Hat euch die Person wirklich entdeckt? Bestätigt nur, wenn es stimmt – dann gewinnen die Fänger.</p>
+              <div className="dialog-actions">
+                <button className="wide-btn secondary" onClick={() => setDismissedClaims((l) => [...l, openClaim.id])}>
+                  Stimmt nicht
+                </button>
+                <button className="wide-btn" onClick={() => game.client?.addAction({ kind: 'confirm-found', claimId: openClaim.id })}>
+                  Ja, gefunden
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-      {showDraw && gameMeta && game.snapshot && (
-        <DrawShow meta={gameMeta} players={game.snapshot.players} meId={game.snapshot.me.id} clockOffset={clockOffset} onSkip={() => setSkippedDraw(gameMeta.draw!.seed)} />
-      )}
+        )}
+        {showDraw && gameMeta && game.snapshot && (
+          <DrawShow meta={gameMeta} players={game.snapshot.players} meId={game.snapshot.me.id} clockOffset={clockOffset} onSkip={() => setSkippedDraw(gameMeta.draw!.seed)} />
+        )}
+      </Suspense>
 
       <TabBar active={activeTab} pinCount={pins.length} onSelect={selectTab} />
       <Toast message={toast} onDone={() => setToast(null)} />
@@ -823,12 +884,16 @@ export function App() {
         />
       )}
       {tour && (
-        <Tour
-          onDone={(completed) => {
-            setTour(false);
-            if (completed) markTour();
-          }}
-        />
+        <Suspense fallback={null}>
+          <Tour
+            onDone={(completed) => {
+              setTour(false);
+              if (completed) markTour();
+              // Die Tour hat das lange Drücken schon erklärt
+              setHintSeen(true);
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );

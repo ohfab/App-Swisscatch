@@ -24,7 +24,7 @@ export default defineConfig({
       manifest: {
         name: 'Zeitgeist – Versteckspiel und Schweizerkarte',
         short_name: 'Zeitgeist',
-        description: 'Das grosse Versteckspiel quer durch die Schweiz – mit Karte und ÖV-Fahrplan.',
+        description: 'Das grosse Versteckspiel quer durch die Schweiz – mit Karte, ÖV-Fahrplan und Geisti.',
         lang: 'de-CH',
         theme_color: '#1F1C35',
         background_color: '#1F1C35',
@@ -36,6 +36,13 @@ export default defineConfig({
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        // Lange aufs App-Symbol drücken: direkt ins Spiel, den Fahrplan, das Tagesquiz oder das Profil
+        shortcuts: [
+          { name: 'Versteckspiel', short_name: 'Spiel', url: `${base}?tab=game`, icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Fahrplan', url: `${base}?tab=route`, icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Geistis Tagesquiz', short_name: 'Tagesquiz', url: `${base}?quiz`, icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Profil', url: `${base}?tab=profile`, icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }] },
         ],
       },
       workbox: {

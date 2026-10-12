@@ -17,6 +17,7 @@ export interface Stats {
   finds: number;
   chats: number;
   routes: number;
+  pokes: number;
   pins: number;
   nightRounds: number;
   cantons: string[];
@@ -25,7 +26,20 @@ export interface Stats {
   /** Abzeichen → Zeitpunkt der Freischaltung */
   badges: Record<string, number>;
   tour: boolean;
+  /** Tagesquiz: Tag («JJJJ-MM-TT») → richtige Antworten von 5 */
+  quiz: Record<string, number>;
+  /** Letzte Runden fürs Profil */
+  history: RoundLog[];
 }
+
+export interface RoundLog {
+  at: number;
+  name: string;
+  team: 'seeker' | 'hider';
+  won: boolean;
+}
+
+export const QUIZ_LEN = 5;
 
 const EMPTY: Stats = {
   rounds: 0,
@@ -38,12 +52,15 @@ const EMPTY: Stats = {
   finds: 0,
   chats: 0,
   routes: 0,
+  pokes: 0,
   pins: 0,
   nightRounds: 0,
   cantons: [],
   recorded: [],
   badges: {},
   tour: false,
+  quiz: {},
+  history: [],
 };
 
 export interface Badge {
@@ -75,6 +92,11 @@ export const BADGES: Badge[] = [
   { id: 'commuter', icon: '🚆', name: 'Pendler', text: 'Such 10 Verbindungen im Fahrplan.', progress: count('routes', 10) },
   { id: 'collector', icon: '📍', name: 'Sammler', text: 'Speichere 5 Orte.', progress: count('pins', 5) },
   { id: 'curious', icon: '👀', name: 'Neugierig', text: 'Mach die Tour mit Geisti.', progress: (s) => [s.tour ? 1 : 0, 1] },
+  { id: 'tickle', icon: '🪶', name: 'Kitzelig', text: 'Tipp Geisti 10-mal an.', progress: count('pokes', 10) },
+  { id: 'quiz1', icon: '🧠', name: 'Streber', text: 'Mach Geistis Tagesquiz.', progress: (s) => [Math.min(1, Object.keys(s.quiz).length), 1] },
+  { id: 'perfect', icon: '💯', name: 'Besserwisser', text: 'Alle 5 Fragen im Tagesquiz richtig.', progress: (s) => [Object.values(s.quiz).some((v) => v >= QUIZ_LEN) ? 1 : 0, 1] },
+  { id: 'streak3', icon: '🔥', name: 'Dranbleiber', text: '3 Tage in Folge das Tagesquiz.', progress: (s) => [Math.min(3, bestStreak(s)), 3] },
+  { id: 'streak7', icon: '🗓️', name: 'Wochengeist', text: '7 Tage in Folge das Tagesquiz.', progress: (s) => [Math.min(7, bestStreak(s)), 7] },
 ];
 
 /** Level mit Namen – vom Nebelhauch bis zum Zeitgeist */
@@ -96,6 +118,7 @@ export function xpOf(s: Stats): number {
     s.challenges * 10 +
     s.finds * 30 +
     s.cantons.length * 20 +
+    Object.values(s.quiz).reduce((sum, v) => sum + v * 10 + (v >= QUIZ_LEN ? 20 : 0), 0) +
     Object.keys(s.badges).length * 25
   );
 }
@@ -113,6 +136,44 @@ export function levelOf(xp: number) {
     next += 400;
   }
   return { n, name: LEVELS[Math.min(i, LEVELS.length - 1)]!.name, base, next, progress: (xp - base) / (next - base) };
+}
+
+// ---------- Tagesquiz und Serie ----------
+
+/** Heutiger Tag in der Schweiz als «JJJJ-MM-TT» */
+export function today(at = Date.now()): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Zurich', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+}
+
+function dayBefore(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Tage in Folge mit Tagesquiz (zählt auch, wenn heute noch offen ist) */
+export function streakOf(s: Stats, now = Date.now()): number {
+  let day = today(now);
+  if (s.quiz[day] === undefined) day = dayBefore(day);
+  let n = 0;
+  while (s.quiz[day] !== undefined) {
+    n++;
+    day = dayBefore(day);
+  }
+  return n;
+}
+
+function bestStreak(s: Stats): number {
+  const days = Object.keys(s.quiz).sort();
+  let best = 0;
+  let run = 0;
+  let prev = '';
+  for (const d of days) {
+    run = prev && dayBefore(d) === prev ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = d;
+  }
+  return best;
 }
 
 // ---------- Speicher ----------
@@ -160,9 +221,16 @@ export function onBadge(l: (b: Badge) => void) {
   };
 }
 
-type Counter = 'chats' | 'routes';
+type Counter = 'chats' | 'routes' | 'pokes';
 export function bump(key: Counter, n = 1) {
   commit({ ...stats, [key]: stats[key] + n });
+}
+
+/** Tagesquiz fertig: zählt einmal pro Tag */
+export function recordQuiz(day: string, correct: number) {
+  if (stats.quiz[day] !== undefined) return;
+  const quiz = Object.fromEntries(Object.entries({ ...stats.quiz, [day]: correct }).sort().slice(-120));
+  commit({ ...stats, quiz });
 }
 
 export function setPins(n: number) {
@@ -179,6 +247,7 @@ export function visitCanton(abbr: string) {
 
 export interface RoundResult {
   key: string;
+  name: string;
   won: boolean;
   team: 'seeker' | 'hider';
   powerups: number;
@@ -204,6 +273,7 @@ export function recordRound(r: RoundResult) {
     finds: stats.finds + r.finds,
     nightRounds: stats.nightRounds + (hour >= 22 || hour < 5 ? 1 : 0),
     recorded: [...stats.recorded, r.key].slice(-60),
+    history: [{ at: r.at, name: r.name, team: r.team, won: r.won }, ...stats.history].slice(0, 20),
   });
 }
 

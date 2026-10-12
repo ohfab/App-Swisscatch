@@ -29,13 +29,13 @@ Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC, und als And
 - **Kantone:** farbige Grenzen und Namen. Antippen zeigt Hauptort, Fläche, Sprachen und Nachbarkantone.
 - **Spielfeld Schweiz:** Das Ausland ist abgedunkelt, die Landesgrenze rot markiert.
 - **Suche:** Orte, Adressen, Berge, Seen und Postleitzahlen über den Suchdienst von geo.admin.ch.
-- **Punkt-Infos:** Lange drücken (am Computer Rechtsklick) zeigt Höhe, Kanton, Koordinaten (LV95 und GPS) und Distanz zu dir.
+- **Punkt-Infos:** Lange drücken (am Computer Rechtsklick) zeigt Höhe, Kanton, Koordinaten (LV95 und GPS), Distanz zu dir und das Wetter (Temperatur, Regenrisiko, Wind, Sonnenuntergang).
 - **Fahrplan:** ÖV-Verbindungen von A nach B, ab dem eigenen Standort oder zu jedem Punkt auf der Karte. Mit Gleisen, Umstiegen, Verspätungen und der Route als Linie auf der Karte.
 - **Abfahrten:** nächste Haltestellen mit Live-Abfahrten in den Originalfarben der Linien.
 - **Eigener Standort:** Live-Position mit Genauigkeit, Folgen-Modus und Fahrtrichtung.
 - **Pins:** Treffpunkte oder Verstecke speichern, benennen, einfärben, teilen. Sie bleiben auf dem Gerät gespeichert.
 - **Zusatzebenen:** ÖV-Haltestellen und Wanderwege.
-- **App-Gefühl:** Vollbild, Bottom-Sheets, Tab-Leiste, Dunkelmodus, installierbar, offline nutzbar für bereits geladene Kartenteile.
+- **App-Gefühl:** Vollbild, Bottom-Sheets, Tab-Leiste, Dunkelmodus, installierbar, offline nutzbar für bereits geladene Kartenteile. Lange aufs App-Symbol drücken öffnet direkt Spiel, Fahrplan, Tagesquiz oder Profil. Fenster laden erst bei Bedarf, so startet die App schneller.
 - **Design «Tinte & Pfirsich»:** klare Konturen, Pillen-Knöpfe, tropfende Kopfzeilen und viele kleine Animationen (springende Tab-Blase, gleitende Tabs, Glücksrad, Versus-Screen).
 - **Geisti, das Maskottchen:** Der kleine Geist schwebt durch die ganze App, mit zehn Stimmungen von fröhlich bis traurig, Lupe für die Fänger und Partyhut bei Siegen. Mehr dazu unten.
 
@@ -48,8 +48,11 @@ Geisti ist der Geist von Zeitgeist und begleitet dich wie der Vogel bei Duolingo
 - **Tipps im Spiel:** Je nach Rolle und Phase gibt Geisti einmalig einen kurzen Tipp, etwa «Logg dein Versteck ein» oder «Kauft Power-ups».
 - **Reaktionen:** Er jubelt mit Partyhut, wenn du gewinnst, ist traurig bei einer Niederlage, versteckt sich (halb durchsichtig) bei den Versteckern und sucht mit der Lupe bei den Fängern.
 - **Profil:** Ein Tipp auf das Logo oben links öffnet dein Profil, mit Level (vom «Nebelhauch» bis zum «Zeitgeist»), XP, Statistik, Geistis Fakt des Tages, Abzeichen und der Kantonssammlung.
-- **Abzeichen:** 17 Abzeichen, z.B. «Spürnase» (als Fänger gewinnen), «Phantom» (als Verstecker gewinnen), «Kantönligeist» (in 5 Kantonen unterwegs), «Nachtgespenst» (Runde nach 22 Uhr) oder «Pendler» (10 Verbindungen gesucht). Neue Abzeichen feiert Geisti mit einer Meldung.
+- **Abzeichen:** 22 Abzeichen, z.B. «Spürnase» (als Fänger gewinnen), «Phantom» (als Verstecker gewinnen), «Kantönligeist» (in 5 Kantonen unterwegs), «Nachtgespenst» (Runde nach 22 Uhr) oder «Pendler» (10 Verbindungen gesucht), «Dranbleiber» (3 Tage Tagesquiz in Folge) oder «Kitzelig» (Geisti zehnmal angetippt). Neue Abzeichen feiert Geisti mit einer Meldung.
 - **Kantone sammeln:** Jeder Kanton, in dem dein Standort an war, kommt in die Sammlung, bis alle 26 voll sind.
+- **Tagesquiz mit Serie:** Jeden Tag stellt Geisti 5 neue Fragen zur Schweiz (für alle dieselben). Wer täglich mitmacht, baut eine Serie 🔥 auf. Eine Erinnerung auf der Karte zeigt, wenn das Quiz von heute noch offen ist. In der Android-App erinnert Geisti am nächsten Tag um 18 Uhr per Mitteilung.
+- **Geisti antippen:** Er kichert, schneidet eine Grimasse und hat einen Spruch auf Lager.
+- **Letzte Runden:** Das Profil zeigt die letzten Spiele mit Rolle und Ergebnis.
 
 Fortschritt und Abzeichen bleiben auf dem Gerät gespeichert.
 
@@ -179,7 +182,8 @@ src/
     Geisti.tsx            Geisti spricht: Sprechblase, Tipps im Spiel, Abzeichen-Meldung
     Onboarding.tsx        Einführung mit Geisti (Name, Ziel, Mitteilungen, App)
     Tour.tsx              Tour durch die App mit Spotlight
-    ProfileSheet.tsx      Profil: Level, Statistik, Abzeichen, Kantone, Einstellungen
+    ProfileSheet.tsx      Profil: Level, Statistik, Serie, Verlauf, Abzeichen, Kantone, Einstellungen
+    QuizSheet.tsx         Geistis Tagesquiz
     MapView.tsx           Leaflet-Karte mit MapLibre-Vektorkarte, Kantone, Pins, Route, Standort
     SearchBar.tsx         Ortssuche
     PlaceSheet.tsx        Infos zu einem Punkt, Pins, ÖV
@@ -205,6 +209,8 @@ src/
     geo.ts                Distanzen, LV95-Umrechnung, Punkt-in-Polygon
     notify.ts             Systembenachrichtigungen (Browser und Android)
     sound.ts              Spieltöne, im Browser erzeugt
+    stats.ts              Fortschritt: XP, Level, Abzeichen, Tagesquiz-Serie, Verlauf
+    weather.ts            Wetter beim Ort (Open-Meteo)
     native.ts             Erkennung der Android-App, öffentliche Adressen
 public/data/              Kantons- und Landesgrenzen als GeoJSON
 native/android/           Symbol, Startbild, Texte und Schlüssel der Android-App
@@ -225,6 +231,7 @@ Die Kantonsdaten lassen sich mit `npm run geodata` neu erzeugen, etwa nach einer
 | Kantonsgrenzen | BFS / swisstopo über [swiss-maps](https://github.com/interactivethings/swiss-maps) | BSD-3-Clause |
 | Gemeinde am Versteck | swisstopo, Gemeindegrenzen über api3.geo.admin.ch | Freie Nutzung mit Quellenangabe |
 | Einwohnerzahl und Amtssprache der Gemeinde | [Wikidata](https://www.wikidata.org) | CC0 |
+| Wetter | [Open-Meteo](https://open-meteo.com) | Gratis ohne Schlüssel, CC BY 4.0 |
 | Schrift Outfit | [Google Fonts](https://fonts.google.com/specimen/Outfit) über Fontsource | SIL Open Font License |
 | Spiel-Nachrichten | [EMQX Public Broker](https://www.emqx.com/en/mqtt/public-mqtt5-broker) und [HiveMQ Public Broker](https://www.hivemq.com/mqtt/public-mqtt-broker/) | Gratis Testbroker ohne Garantie, parallel genutzt; Inhalte verschlüsselt |
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Ghost, type GhostMood } from './Art';
-import { onBadge, useTipSeen, type Badge } from '../lib/stats';
+import { bump, onBadge, useTipSeen, type Badge } from '../lib/stats';
 import { buzz, play } from '../lib/sound';
 
 /** Text Buchstabe für Buchstabe zeigen, wie gesprochen. Antippen zeigt alles. */
@@ -24,6 +24,45 @@ export function useTypewriter(text: string, speed = 24) {
     return () => window.clearInterval(id);
   }, [text, speed]);
   return { shown: text.slice(0, n), done: n >= text.length, finish: () => setN(text.length) };
+}
+
+const POKES = [
+  'Hihi, das kitzelt! 👻',
+  'Buh!',
+  'Ich bin nicht durchsichtig, nur schüchtern.',
+  'Geister fahren übrigens gratis ÖV.',
+  'Noch einmal und ich verschwinde!',
+  'Huch!',
+  'Ich spuke seit 1291 durch die Schweiz.',
+  'Psst, ich kenne jedes Versteck …',
+];
+const POKE_MOODS: GhostMood[] = ['surprised', 'cheer', 'wink', 'love'];
+
+/** Antippen: Geisti reagiert mit einem Spruch, einem Ton und einer anderen Miene */
+function PokeableGhost(props: Omit<Parameters<typeof Ghost>[0], 'className'>) {
+  const [n, setN] = useState(0);
+  const [active, setActive] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const poke = () => {
+    play('boo');
+    buzz(25);
+    bump('pokes');
+    setN((v) => v + 1);
+    setActive(true);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setActive(false), 2200);
+  };
+  return (
+    <button type="button" className="ghost-btn" onClick={poke} aria-label="Geisti antippen">
+      {active && (
+        <span className="ghost-poke" key={n}>
+          {POKES[(n - 1) % POKES.length]}
+        </span>
+      )}
+      <Ghost {...props} mood={active ? POKE_MOODS[(n - 1) % POKE_MOODS.length] : props.mood} talking={active ? false : props.talking} />
+    </button>
+  );
 }
 
 /** Geisti mit Sprechblase */
@@ -59,7 +98,7 @@ export function GeistiSays({
         </span>
         <span className="speech-typed">{shown}</span>
       </button>
-      <Ghost size={size} mood={mood} talking={!done && mood !== 'sleep'} wave={wave} party={party} magnifier={magnifier} />
+      <PokeableGhost size={size} mood={mood} talking={!done && mood !== 'sleep'} wave={wave} party={party} magnifier={magnifier} />
     </div>
   );
 }

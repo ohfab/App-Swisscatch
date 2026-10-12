@@ -6,7 +6,7 @@ import { load, save } from './storage';
  * beim ersten Tippen freigeschaltet.
  */
 
-export type SoundName = 'tick' | 'pick' | 'whoosh' | 'count' | 'go' | 'challenge' | 'trap' | 'buy' | 'right' | 'wrong' | 'win' | 'lose' | 'chat' | 'found';
+export type SoundName = 'tick' | 'pick' | 'whoosh' | 'count' | 'go' | 'challenge' | 'trap' | 'buy' | 'right' | 'wrong' | 'win' | 'lose' | 'chat' | 'found' | 'boo';
 
 let ctx: AudioContext | null = null;
 let enabled = load<boolean>('sound.v1', true);
@@ -132,6 +132,11 @@ export function play(name: SoundName) {
     case 'found':
     case 'win':
       [523, 659, 784, 1047, 1319].forEach((f, i) => tone(a, f, t + i * 0.11, i === 4 ? 0.6 : 0.16, 'triangle', 0.17));
+      break;
+    case 'boo':
+      // Kichernder Geist: kurzes Wackeln nach oben
+      tone(a, 520, t, 0.16, 'sine', 0.14, 880);
+      tone(a, 700, t + 0.12, 0.22, 'triangle', 0.1, 420);
       break;
     case 'lose':
       [392, 330, 262].forEach((f, i) => tone(a, f, t + i * 0.22, 0.3, 'triangle', 0.14));

@@ -9,6 +9,7 @@ import { nearbyStations, TIMETABLE_CREDIT, type Station } from '../lib/transport
 import { shareLink, type Place } from '../lib/place';
 import { PIN_COLORS, type Pin } from '../hooks/usePins';
 import type { Position } from '../hooks/useGeolocation';
+import { describeWeather, fetchWeather, WEATHER_CREDIT, type Weather } from '../lib/weather';
 
 interface Props {
   place: Place;
@@ -40,6 +41,7 @@ export function PlaceSheet(props: Props) {
   const { place, pin, position } = props;
   const [canton, setCanton] = useState<CantonFeature | null | undefined>(undefined);
   const [height, setHeight] = useState<number | null | undefined>(undefined);
+  const [weather, setWeather] = useState<Weather | null | undefined>(undefined);
   const [stationState, setStationState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [name, setName] = useState(pin?.name ?? '');
   const transitRef = useRef<HTMLHeadingElement>(null);
@@ -57,6 +59,11 @@ export function PlaceSheet(props: Props) {
     fetchHeight(place, ctrl.signal).then(
       (h) => setHeight(h),
       () => !ctrl.signal.aborted && setHeight(null),
+    );
+    setWeather(undefined);
+    fetchWeather(place, ctrl.signal).then(
+      (w) => setWeather(w),
+      () => !ctrl.signal.aborted && setWeather(null),
     );
     return () => ctrl.abort();
   }, [place.lat, place.lng]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -230,6 +237,8 @@ export function PlaceSheet(props: Props) {
         </div>
       </dl>
 
+      {weather && <WeatherCard w={weather} />}
+
       {(props.stations.length > 0 || stationState !== 'idle') && (
         <>
           <h3 className="section-title" ref={transitRef}>
@@ -242,5 +251,26 @@ export function PlaceSheet(props: Props) {
         </>
       )}
     </BottomSheet>
+  );
+}
+
+function WeatherCard({ w }: { w: Weather }) {
+  const d = describeWeather(w.code, w.isDay);
+  return (
+    <div className="weather-card" title={WEATHER_CREDIT}>
+      <span className="weather-icon">{d.icon}</span>
+      <div className="weather-main">
+        <strong>
+          {Math.round(w.temp)}° · {d.text}
+        </strong>
+        <small>
+          {Number.isFinite(w.max) && Number.isFinite(w.min) ? `heute ${Math.round(w.min)}° bis ${Math.round(w.max)}°` : ''}
+          {w.rain !== null ? ` · Regen ${w.rain} %` : ''}
+          {` · Wind ${Math.round(w.wind)} km/h`}
+          {w.sunset ? ` · 🌇 ${w.sunset}` : ''}
+        </small>
+      </div>
+      <small className="weather-credit">{WEATHER_CREDIT}</small>
+    </div>
   );
 }

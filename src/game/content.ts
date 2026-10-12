@@ -421,6 +421,16 @@ export function challengeFor(seed: string, n: number, inHiding: boolean, seekMin
   return n % 3 === 0 && photos.length ? pick(r, photos) : pick(r, others);
 }
 
+/** Geistis Tagesquiz: jeden Tag dieselben 5 Fragen für alle, ohne Doppel */
+export function dailyQuiz(day: string, cantons: CantonProps[], count = 5): ChallengeDef[] {
+  const out: ChallengeDef[] = [];
+  for (let i = 0; out.length < count && i < count * 6; i++) {
+    const q = quizQuestion(`daily:${day}:${i}`, cantons);
+    if (q.input.kind === 'choice' && !out.some((o) => o.id === q.id || o.prompt === q.prompt)) out.push(q);
+  }
+  return out;
+}
+
 export function riddleFor(seed: string, n: number, cantons: CantonProps[]): ChallengeDef {
   return { ...quizQuestion(`${seed}:riddle:${n}`, cantons), title: 'Rätsel' };
 }

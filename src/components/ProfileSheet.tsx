@@ -1,7 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { GeistiSays } from './Geisti';
-import { BADGES, levelOf, useStats, xpOf } from '../lib/stats';
+import { BADGES, levelOf, QUIZ_LEN, streakOf, today, useStats, xpOf } from '../lib/stats';
+import { formatTimeOfDay } from '../game/rules';
 import { setSoundOn, soundOn, subscribeSound } from '../lib/sound';
 import { factOfDay } from '../game/content';
 import { loadCantons, type CantonProps } from '../lib/cantons';
@@ -12,12 +13,13 @@ interface Props {
   onName: (name: string) => void;
   onClose: () => void;
   onTour: () => void;
+  onQuiz: () => void;
   onIntro: () => void;
   onOpenApp: () => void;
 }
 
 /** Profil: Level, Statistik, Abzeichen, besuchte Kantone und Einstellungen */
-export function ProfileSheet({ name, onName, onClose, onTour, onIntro, onOpenApp }: Props) {
+export function ProfileSheet({ name, onName, onClose, onTour, onQuiz, onIntro, onOpenApp }: Props) {
   const s = useStats();
   const xp = xpOf(s);
   const lvl = levelOf(xp);
@@ -30,7 +32,9 @@ export function ProfileSheet({ name, onName, onClose, onTour, onIntro, onOpenApp
       .catch(() => undefined);
   }, []);
 
-  const day = new Date().toISOString().slice(0, 10);
+  const day = today();
+  const streak = streakOf(s);
+  const quizToday = s.quiz[day];
   const fact = factOfDay(day);
   const unlocked = BADGES.filter((b) => s.badges[b.id]).length;
   const first = name.split(/\s+/)[0] || 'du';
@@ -70,6 +74,17 @@ export function ProfileSheet({ name, onName, onClose, onTour, onIntro, onOpenApp
         </div>
       </div>
 
+      <button className="quiz-card" onClick={onQuiz}>
+        <span className="quiz-flame">🔥</span>
+        <span className="quiz-card-text">
+          <strong>
+            {streak} {streak === 1 ? 'Tag' : 'Tage'} Serie
+          </strong>
+          <small>{quizToday === undefined ? 'Das Tagesquiz von heute wartet auf dich!' : `Heute ${quizToday}/${QUIZ_LEN} richtig – morgen geht’s weiter.`}</small>
+        </span>
+        <span className="chip active">{quizToday === undefined ? 'Los' : 'Ansehen'}</span>
+      </button>
+
       <div className="fact-card">
         <span className="fact-icon">{fact.icon}</span>
         <div>
@@ -87,6 +102,26 @@ export function ProfileSheet({ name, onName, onClose, onTour, onIntro, onOpenApp
           </div>
         ))}
       </div>
+
+      {s.history.length > 0 && (
+        <>
+          <h3 className="section-title">Letzte Runden</h3>
+          <ul className="history">
+            {s.history.slice(0, 8).map((h) => (
+              <li key={h.at} className={h.won ? 'won' : 'lost'}>
+                <span className="history-icon">{h.won ? '🏆' : '👻'}</span>
+                <span className="history-text">
+                  <strong>{h.name}</strong>
+                  <small>
+                    {h.team === 'seeker' ? 'Fänger' : 'Verstecker'} · {new Date(h.at).toLocaleDateString('de-CH', { day: 'numeric', month: 'short' })}, {formatTimeOfDay(h.at)}
+                  </small>
+                </span>
+                <span className="history-result">{h.won ? 'Sieg' : 'verloren'}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <h3 className="section-title">
         Abzeichen · {unlocked} von {BADGES.length}

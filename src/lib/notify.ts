@@ -58,6 +58,37 @@ export async function notifyUser(title: string, body: string, tag = 'zeitgeist')
   }
 }
 
+const REMINDER_ID = 9001;
+
+/**
+ * Erinnerung ans Tagesquiz für morgen um 18 Uhr (nur in der Android-App: dort kommen
+ * geplante Meldungen auch, wenn die App zu ist). Eine neue ersetzt die alte.
+ */
+export async function scheduleQuizReminder(streak: number) {
+  if (!isNative) return;
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    if ((await LocalNotifications.checkPermissions()).display !== 'granted') return;
+    await LocalNotifications.cancel({ notifications: [{ id: REMINDER_ID }] });
+    const at = new Date();
+    at.setDate(at.getDate() + 1);
+    at.setHours(18, 0, 0, 0);
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: REMINDER_ID,
+          title: streak > 1 ? `🔥 ${streak} Tage Serie – mach weiter!` : '👻 Geisti hat neue Fragen',
+          body: 'Dein Tagesquiz wartet: 5 Fragen zur Schweiz, dauert eine Minute.',
+          schedule: { at, allowWhileIdle: true },
+          extra: { url: '?quiz' },
+        },
+      ],
+    });
+  } catch {
+    // Erinnerungen sind ein Zusatz
+  }
+}
+
 /** Aktueller Stand der Erlaubnis, mit Funktion zum Nachfragen */
 export function useNotifyPermission() {
   const [perm, setPerm] = useState<NotifyPermission>('default');
