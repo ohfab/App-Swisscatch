@@ -1,29 +1,30 @@
 import { useState } from 'react';
 import { BottomSheet } from './BottomSheet';
-import { CheckIcon, CopyIcon, DownloadIcon, FlagIcon, LocateIcon, ShareIcon, UsersIcon } from './Icons';
+import { CopyIcon, DownloadIcon, FlagIcon, LocateIcon, ShareIcon, UsersIcon } from './Icons';
 import type { GeoStatus, Position } from '../hooks/useGeolocation';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
-import { useNow } from '../hooks/useNow';
-import { useWakeLock, wakeLockSupported } from '../hooks/useWakeLock';
-import { usePersistentState } from '../hooks/usePersistentState';
 import { inviteLink, type GameApi } from '../game/useGame';
-import { formatAgo, formatClock, gameEnd, huntStart, isOnline, nextPingAt, teamOf, visibleFix } from '../game/rules';
-import type { GameMeta, GameSettings, PlayerState, Team } from '../game/types';
+import { formatClock, isOnline } from '../game/rules';
+import type { Derived } from '../game/derive';
+import type { GameMeta, GameSettings } from '../game/types';
 import type { GameSnapshot } from '../game/client';
-import { distanceMeters, formatDistance } from '../lib/geo';
+import { distanceMeters, formatDistance, formatNumber } from '../lib/geo';
 import { normalizeCode, CODE_LENGTH } from '../game/crypto';
+import { Avatar, TEAM_ICON, TEAM_LABEL } from './game/common';
+import { HiderView, SeekerView } from './game/TeamViews';
 
 interface Props {
   game: GameApi;
+  d: Derived | null;
+  now: number;
+  prefillCode: string;
   geoStatus: GeoStatus;
   position: Position | null;
   onStartGps: () => void;
-  onShowPlayer: (lat: number, lng: number) => void;
+  onShowPoint: (lat: number, lng: number) => void;
   onToast: (msg: string) => void;
   onClose: () => void;
 }
-
-export const TEAM_LABEL: Record<Team, string> = { hunter: 'Jäger', runner: 'Gejagt' };
 
 async function copy(text: string) {
   try {
@@ -32,18 +33,6 @@ async function copy(text: string) {
   } catch {
     return false;
   }
-}
-
-export function Avatar({ p, team, size = 34 }: { p: Pick<PlayerState, 'name' | 'color'>; team?: Team; size?: number }) {
-  return (
-    <span
-      className={`avatar ${team ?? ''}`}
-      style={{ background: p.color, width: size, height: size, fontSize: size * 0.42 }}
-      aria-hidden="true"
-    >
-      {(p.name.trim()[0] ?? '?').toUpperCase()}
-    </span>
-  );
 }
 
 // ---------- Kein Spiel: Erstellen oder Beitreten ----------
@@ -61,7 +50,6 @@ function StartView({ game, prefillCode }: { game: GameApi; prefillCode: string }
         <span>Dein Name</span>
         <input value={name} maxLength={20} placeholder="z.B. Fabi" onChange={(e) => setName(e.target.value)} onBlur={commitName} />
       </label>
-
       <div className="game-cards">
         <section className="game-card">
           <h3>
@@ -70,7 +58,6 @@ function StartView({ game, prefillCode }: { game: GameApi; prefillCode: string }
           <input
             className="code-input"
             value={code}
-            inputMode="text"
             autoCapitalize="characters"
             placeholder="CODE"
             aria-label="Spielcode"
@@ -92,7 +79,7 @@ function StartView({ game, prefillCode }: { game: GameApi; prefillCode: string }
           <h3>
             <FlagIcon size={18} /> Neues Spiel
           </h3>
-          <input className="plain-input" value={gameName} maxLength={30} placeholder="Name, z.B. Fangis Ostschweiz" onChange={(e) => setGameName(e.target.value)} />
+          <input className="plain-input" value={gameName} maxLength={30} placeholder="Name, z.B. Versteckis Ostschweiz" onChange={(e) => setGameName(e.target.value)} />
           <button
             className="wide-btn secondary"
             disabled={!nameOk}
@@ -107,137 +94,64 @@ function StartView({ game, prefillCode }: { game: GameApi; prefillCode: string }
       </div>
       {!nameOk && <p className="muted small route-note">Gib zuerst deinen Namen ein (mindestens 2 Zeichen).</p>}
       <p className="fine-print">
-        Dein Standort geht nur an die Mitspieler und ist mit dem Spielcode verschlüsselt. Er wird nur gesendet, solange
-        die App offen ist.
+        Standorte und Fotos gehen nur an die Mitspieler und sind mit dem Spielcode verschlüsselt. Gesendet wird nur, solange die App
+        offen ist.
       </p>
     </>
   );
 }
 
-// ---------- Einstellungen ----------
+// ---------- Lobby ----------
 
-const OPTIONS = {
-  durationMin: [30, 60, 90, 120, 180, 240, 360, 480],
-  pingIntervalMin: [1, 5, 10, 15, 20, 30, 45, 60],
-  headStartMin: [0, 5, 10, 15, 20, 30, 45, 60],
+const OPTIONS: Record<keyof GameSettings, { values: number[]; fmt: (v: number) => string; label: string }> = {
+  maxPlayers: { values: [2, 3, 4, 5, 6, 7, 8, 10, 12], fmt: (v) => `${v} Spieler`, label: 'Auslosung bei' },
+  hideMin: { values: [1, 15, 30, 45, 60, 90, 120, 150, 180], fmt: (v) => (v === 1 ? '1 Min (Test)' : minLabel(v)), label: 'Versteckzeit' },
+  seekMaxMin: { values: [30, 60, 90, 120, 180, 240, 300, 360], fmt: (v) => minLabel(v), label: 'Max. Suchzeit' },
+  challengeEveryMin: { values: [1, 5, 10, 15, 20, 30], fmt: (v) => (v === 1 ? 'jede Minute (Test)' : `alle ${v} Min`), label: 'Challenges' },
+  seekerPointsPerMin: { values: [1, 2, 3, 5], fmt: (v) => `${v} P pro Min`, label: 'Punkte Fänger' },
+  seekerStartPoints: { values: [0, 20, 50, 100, 200], fmt: (v) => `${v} P`, label: 'Startguthaben Fänger' },
 };
 
-const minLabel = (m: number) => (m === 0 ? 'keiner' : m < 60 ? `${m} Min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60} Min` : `${m / 60} h`);
+function minLabel(m: number) {
+  if (m < 60) return `${m} Min`;
+  return m % 60 ? `${Math.floor(m / 60)} h ${m % 60} Min` : `${m / 60} h`;
+}
 
 function SettingsView({ meta, editable, onChange }: { meta: GameMeta; editable: boolean; onChange: (p: Partial<GameSettings>) => void }) {
-  const s = meta.settings;
-  const select = (key: keyof typeof OPTIONS, label: string, fmt = minLabel) => (
-    <label className="setting">
-      <span>{label}</span>
-      <select disabled={!editable} value={s[key]} onChange={(e) => onChange({ [key]: Number(e.target.value) })}>
-        {OPTIONS[key].map((v) => (
-          <option key={v} value={v}>
-            {fmt(v)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
   return (
     <div className="settings">
-      {select('durationMin', 'Spieldauer')}
-      {select('headStartMin', 'Vorsprung der Gejagten')}
-      {select('pingIntervalMin', 'Standort der Gejagten', (v) => `alle ${minLabel(v)}`)}
-      <label className="setting">
-        <span>Jäger sichtbar für Gejagte</span>
-        <select
-          disabled={!editable}
-          value={s.hunterVisibility}
-          onChange={(e) => onChange({ hunterVisibility: e.target.value as GameSettings['hunterVisibility'] })}
-        >
-          <option value="live">immer (live)</option>
-          <option value="ping">nur beim Ping</option>
-          <option value="hidden">nie</option>
-        </select>
-      </label>
-      <label className="setting">
-        <span>Gefangene werden Jäger</span>
-        <select disabled={!editable} value={s.caughtBecomeHunters ? '1' : '0'} onChange={(e) => onChange({ caughtBecomeHunters: e.target.value === '1' })}>
-          <option value="0">nein</option>
-          <option value="1">ja</option>
-        </select>
-      </label>
+      {(Object.keys(OPTIONS) as (keyof GameSettings)[]).map((key) => {
+        const o = OPTIONS[key];
+        const value = meta.settings[key];
+        const values = o.values.includes(value) ? o.values : [...o.values, value].sort((a, b) => a - b);
+        return (
+          <label key={key} className="setting">
+            <span>{o.label}</span>
+            <select disabled={!editable} value={value} onChange={(e) => onChange({ [key]: Number(e.target.value) })}>
+              {values.map((v) => (
+                <option key={v} value={v}>
+                  {o.fmt(v)}
+                </option>
+              ))}
+            </select>
+          </label>
+        );
+      })}
     </div>
   );
 }
 
-// ---------- Spielerliste ----------
-
-function PlayerRow({
-  p,
-  snap,
-  position,
-  now,
-  onTeam,
-  onShow,
-  action,
-}: {
-  p: PlayerState;
-  snap: GameSnapshot;
-  position: Position | null;
-  now: number;
-  onTeam?: () => void;
-  onShow?: (lat: number, lng: number) => void;
-  action?: React.ReactNode;
-}) {
-  const meta = snap.meta!;
-  const team = teamOf(meta, p.id);
-  const me = p.id === snap.me.id;
-  const viewerTeam = teamOf(meta, snap.me.id);
-  const vis = me ? null : visibleFix(meta, viewerTeam, p);
-  const parts: string[] = [];
-  if (meta.hostId === p.id) parts.push('Host');
-  if (p.caughtAt) parts.push(`gefangen ${formatAgo(now - p.caughtAt)}`);
-  else if (vis) {
-    if (vis.kind === 'ping') parts.push(`Ping ${formatAgo(now - vis.fix.t)}`);
-    if (position) parts.push(formatDistance(distanceMeters(position, vis.fix)));
-  } else if (me && meta.phase === 'running') {
-    if (team === 'hunter') parts.push('du sendest live');
-    else parts.push(p.ping ? `dein Ping ${formatAgo(now - p.ping.t)}` : 'noch kein Ping gesendet');
-  } else if (!me && meta.phase === 'running' && team === 'runner') parts.push('noch kein Ping');
-  if (!me && !isOnline(p, now)) parts.push('offline');
-  return (
-    <li className={`player ${p.caughtAt ? 'caught' : ''}`}>
-      <button className="player-main" onClick={vis && onShow ? () => onShow(vis.fix.lat, vis.fix.lng) : undefined} disabled={!vis}>
-        <Avatar p={p} team={team} />
-        <span className="player-text">
-          <strong>
-            {p.name}
-            {me && ' (du)'}
-          </strong>
-          {parts.length > 0 && <small>{parts.join(' · ')}</small>}
-        </span>
-      </button>
-      {onTeam ? (
-        <button className={`team-chip ${team}`} onClick={onTeam} aria-label={`Team von ${p.name} wechseln`}>
-          {TEAM_LABEL[team]}
-        </button>
-      ) : (
-        <span className={`team-chip ${team} static`}>{TEAM_LABEL[team]}</span>
-      )}
-      {action}
-    </li>
-  );
-}
-
-// ---------- Lobby ----------
-
-function LobbyView({ game, snap, position, now, onShowPlayer, onToast }: { game: GameApi; snap: GameSnapshot; position: Position | null; now: number; onShowPlayer: Props['onShowPlayer']; onToast: Props['onToast'] }) {
+function LobbyView({ game, snap, position, now, onToast }: { game: GameApi; snap: GameSnapshot; position: Position | null; now: number; onToast: Props['onToast'] }) {
   const c = game.client!;
   const meta = snap.meta!;
   const host = meta.hostId === snap.me.id;
   const players = Object.values(snap.players).sort((a, b) => a.joinedAt - b.joinedAt);
-  const hunters = players.filter((p) => teamOf(meta, p.id) === 'hunter').length;
-  const runners = players.length - hunters;
+  const online = players.filter((p) => p.id === snap.me.id || isOnline(p, now));
+  const need = meta.settings.maxPlayers;
   const link = inviteLink(snap.code);
 
   const share = async () => {
-    const text = `Komm ins SwissCatch-Spiel «${meta.name}»! Code: ${snap.code}`;
+    const text = `Komm ins SwissCatch-Versteckspiel «${meta.name}»! Code: ${snap.code}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: 'SwissCatch', text, url: link });
@@ -260,194 +174,141 @@ function LobbyView({ game, snap, position, now, onShowPlayer, onToast }: { game:
           </button>
         </div>
         <button className="wide-btn invite" onClick={share}>
-          <ShareIcon size={18} /> Freunde einladen
+          <ShareIcon size={18} /> Einladen
         </button>
       </div>
 
-      <h3 className="section-title">
-        Spieler ({players.length}) · {hunters} Jäger, {runners} Gejagte
-      </h3>
+      <div className="lobby-progress">
+        <div className="lobby-bar">
+          <span style={{ width: `${Math.min(100, (online.length / need) * 100)}%` }} />
+        </div>
+        <strong>
+          {online.length} / {need} Spieler
+        </strong>
+        <small>
+          {meta.round > 1
+            ? `Runde ${meta.round}: Der Host lost neu aus oder tauscht die Rollen.`
+            : 'Ist die Lobby voll, lost die App die Teams aus: die Hälfte versteckt sich, die anderen suchen.'}
+        </small>
+      </div>
+
       <ul className="players">
         {players.map((p) => (
-          <PlayerRow
-            key={p.id}
-            p={p}
-            snap={snap}
-            position={position}
-            now={now}
-            onShow={onShowPlayer}
-            onTeam={
-              host || p.id === snap.me.id
-                ? () => {
-                    const next: Team = teamOf(meta, p.id) === 'hunter' ? 'runner' : 'hunter';
-                    if (host) c.setTeam(p.id, next);
-                    else c.requestTeam(next);
-                  }
-                : undefined
-            }
-          />
+          <li key={p.id} className="player">
+            <span className="player-main">
+              <Avatar p={p} />
+              <span className="player-text">
+                <strong>
+                  {p.name}
+                  {p.id === snap.me.id && ' (du)'}
+                </strong>
+                <small>
+                  {[
+                    meta.hostId === p.id ? 'Host' : null,
+                    p.id !== snap.me.id && p.pos && position ? formatDistance(distanceMeters(position, p.pos)) : null,
+                    p.id !== snap.me.id && !isOnline(p, now) ? 'offline' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'bereit'}
+                </small>
+              </span>
+            </span>
+          </li>
         ))}
       </ul>
-      <p className="muted small route-note">Tippe auf «Jäger» oder «Gejagt», um das Team zu wechseln.</p>
 
       <h3 className="section-title">Regeln {host ? '' : '(legt der Host fest)'}</h3>
       <SettingsView meta={meta} editable={host} onChange={(p) => c.updateSettings(p)} />
 
       {host ? (
-        <button className="wide-btn start" disabled={hunters === 0 || runners === 0} onClick={() => c.start()}>
-          Spiel starten
-        </button>
+        <div className="draw-actions">
+          <button className="wide-btn start" disabled={online.length < 2} onClick={() => c.draw()}>
+            🎡 {meta.round > 1 ? 'Neu auslosen' : 'Jetzt auslosen'}
+          </button>
+          {meta.round > 1 && meta.lastHiders && (
+            <button className="wide-btn secondary" disabled={online.length < 2} onClick={() => c.draw(true)}>
+              🔄 Rollen tauschen
+            </button>
+          )}
+        </div>
       ) : (
-        <p className="muted small route-note">Warte, bis der Host das Spiel startet …</p>
-      )}
-      {host && (hunters === 0 || runners === 0) && <p className="muted small route-note">Es braucht mindestens einen Jäger und einen Gejagten.</p>}
-    </>
-  );
-}
-
-// ---------- Laufendes Spiel ----------
-
-function RunningView({ game, snap, position, now, onShowPlayer }: { game: GameApi; snap: GameSnapshot; position: Position | null; now: number; onShowPlayer: Props['onShowPlayer'] }) {
-  const c = game.client!;
-  const meta = snap.meta!;
-  const myTeam = teamOf(meta, snap.me.id);
-  const me = snap.players[snap.me.id];
-  const host = meta.hostId === snap.me.id;
-  const [awake, setAwake] = usePersistentState('game.wakelock', true);
-  useWakeLock(awake);
-  const start = huntStart(meta);
-  const end = gameEnd(meta);
-  const next = nextPingAt(meta, now);
-  const players = Object.values(snap.players).sort((a, b) => a.joinedAt - b.joinedAt);
-  const byTeam = (t: Team) => players.filter((p) => teamOf(meta, p.id) === t);
-
-  return (
-    <>
-      <div className={`status-card ${myTeam}`}>
-        <div className="status-role">
-          <small>Deine Rolle</small>
-          <strong>{me?.caughtAt ? 'Gefangen' : TEAM_LABEL[myTeam]}</strong>
-        </div>
-        <div className="status-times">
-          {now < start ? (
-            <div>
-              <small>{myTeam === 'hunter' ? 'Warten noch' : 'Vorsprung'}</small>
-              <strong>{formatClock(start - now)}</strong>
-            </div>
-          ) : (
-            <div>
-              <small>Restzeit</small>
-              <strong>{formatClock(end - now)}</strong>
-            </div>
-          )}
-          {next && (
-            <div>
-              <small>Nächster Ping</small>
-              <strong>{formatClock(next - now)}</strong>
-            </div>
-          )}
-        </div>
-      </div>
-      {myTeam === 'hunter' && now < start && <p className="muted small route-note">Fair bleiben: Losrennen erst nach Ablauf des Vorsprungs.</p>}
-      {myTeam === 'runner' && !me?.caughtAt && (
-        <p className="muted small route-note">
-          Beim Ping sehen die Jäger deinen Standort. Lass die App offen, sonst wird der Ping nachgeholt, sobald du sie
-          wieder öffnest.
-        </p>
-      )}
-
-      {(['runner', 'hunter'] as const).map((t) => (
-        <div key={t}>
-          <h3 className="section-title">
-            {t === 'runner' ? 'Gejagte' : 'Jäger'} ({byTeam(t).length})
-          </h3>
-          <ul className="players">
-            {byTeam(t).map((p) => (
-              <PlayerRow
-                key={p.id}
-                p={p}
-                snap={snap}
-                position={position}
-                now={now}
-                onShow={onShowPlayer}
-                action={
-                  myTeam === 'hunter' && t === 'runner' && !p.caughtAt && !me?.caughtAt ? (
-                    <button className="chip catch" onClick={() => c.claimCatch(p.id)}>
-                      Gefangen!
-                    </button>
-                  ) : undefined
-                }
-              />
-            ))}
-          </ul>
-        </div>
-      ))}
-
-      {myTeam === 'runner' && !me?.caughtAt && (
-        <button
-          className="wide-btn danger-btn"
-          onClick={() => window.confirm('Wurdest du wirklich gefangen?') && c.reportCaught()}
-        >
-          Ich wurde gefangen
-        </button>
-      )}
-      {wakeLockSupported() && (
-        <label className="toggle-row plain">
-          <span>
-            <strong>Bildschirm anlassen</strong>
-            <small>Hält Standort und Pings am Laufen</small>
-          </span>
-          <input type="checkbox" role="switch" checked={awake} onChange={() => setAwake(!awake)} />
-          <span className="switch" aria-hidden="true" />
-        </label>
-      )}
-      {host && (
-        <button className="wide-btn secondary" onClick={() => window.confirm('Spiel für alle beenden?') && c.end('host')}>
-          Spiel beenden
-        </button>
+        <p className="muted small route-note">{meta.round > 1 ? 'Warte, bis der Host die neue Runde auslost …' : 'Warte, bis die Lobby voll ist oder der Host auslost …'}</p>
       )}
     </>
   );
 }
 
-// ---------- Spielende ----------
+// ---------- Ergebnis ----------
 
-function EndedView({ game, snap, now }: { game: GameApi; snap: GameSnapshot; now: number }) {
-  const meta = snap.meta!;
-  const host = meta.hostId === snap.me.id;
-  const players = Object.values(snap.players);
-  const runners = players.filter((p) => teamOf(meta, p.id) === 'runner' || p.caughtAt);
-  const start = huntStart(meta);
-  const headline =
-    meta.endReason === 'all-caught'
-      ? 'Alle gefangen – die Jäger gewinnen!'
-      : meta.endReason === 'time'
-        ? 'Zeit um – die Gejagten gewinnen!'
-        : 'Spiel beendet';
+function ResultView({ game, snap, d, onShowPoint }: { game: GameApi; snap: GameSnapshot; d: Derived; onShowPoint: Props['onShowPoint'] }) {
+  const r = d.result;
+  const host = snap.meta?.hostId === snap.me.id;
+  const myTeam = d.teamOf(snap.me.id);
+  const won = r?.winner === myTeam;
+  const headline = !r || !r.winner ? 'Spiel beendet' : r.winner === 'seeker' ? '🔍 Die Fänger gewinnen!' : '🫣 Die Verstecker gewinnen!';
+  const sub =
+    r?.reason === 'found'
+      ? `${snap.players[r.finder ?? '']?.name ?? 'Die Fänger'} hat das Versteck nach ${formatClock(r.hiddenMs)} Suche gefunden.`
+      : r?.reason === 'time'
+        ? `Unentdeckt während ${formatClock(r.hiddenMs)} – die Zeit ist abgelaufen.`
+        : 'Der Host hat das Spiel beendet.';
+  const powerups = d.actions.filter((a) => a.kind === 'powerup').length;
+  const challenges = d.challenges.filter((c) => c.done).length;
   return (
     <>
-      <div className="result">
-        <span className="result-icon">
-          <CheckIcon size={26} />
-        </span>
+      <div className={`result ${won ? 'won' : 'lost'}`}>
+        <span className="result-emoji">{won ? '🏆' : r?.winner ? '😮‍💨' : '🏁'}</span>
         <strong>{headline}</strong>
-        <small>Gespielt: {formatClock((meta.endedAt ?? now) - (meta.startedAt ?? now))}</small>
+        <small>{sub}</small>
       </div>
-      <h3 className="section-title">Gejagte</h3>
+      <dl className="stats result-stats">
+        <div>
+          <dt>Versteckt</dt>
+          <dd>{formatClock(r?.hiddenMs ?? 0)}</dd>
+        </div>
+        <div>
+          <dt>Power-ups</dt>
+          <dd>{powerups}</dd>
+        </div>
+        <div>
+          <dt>Challenges</dt>
+          <dd>
+            {challenges}/{d.challenges.length}
+          </dd>
+        </div>
+      </dl>
+      {d.spot && (
+        <div className="spot-card done">
+          <div className="spot-head">
+            <span>🏠</span>
+            <div>
+              <strong>Das Versteck</strong>
+              <small>
+                {[d.spot.facts.municipality, d.spot.facts.cantonName].filter(Boolean).join(', ') || 'eingeloggt'}
+                {d.spot.facts.population ? ` · ${formatNumber(d.spot.facts.population)} Einwohner` : ''}
+              </small>
+            </div>
+            <button className="chip" onClick={() => onShowPoint(d.spot!.fix.lat, d.spot!.fix.lng)}>
+              Zeigen
+            </button>
+          </div>
+        </div>
+      )}
+      <h3 className="section-title">Teams</h3>
       <ul className="players">
-        {runners
-          .sort((a, b) => (b.caughtAt ?? Infinity) - (a.caughtAt ?? Infinity))
-          .map((p) => (
-            <li key={p.id} className="player">
-              <span className="player-main">
-                <Avatar p={p} team="runner" />
-                <span className="player-text">
-                  <strong>{p.name}</strong>
-                  <small>{p.caughtAt ? `gefangen nach ${formatClock(p.caughtAt - start)}` : 'nicht gefangen 🎉'}</small>
-                </span>
+        {Object.values(snap.players).map((p) => (
+          <li key={p.id} className="player">
+            <span className="player-main">
+              <Avatar p={p} team={d.teamOf(p.id)} />
+              <span className="player-text">
+                <strong>{p.name}</strong>
+                <small>
+                  {TEAM_ICON[d.teamOf(p.id)]} {TEAM_LABEL[d.teamOf(p.id)]}
+                </small>
               </span>
-            </li>
-          ))}
+            </span>
+          </li>
+        ))}
       </ul>
       {host ? (
         <button className="wide-btn start" onClick={() => game.client?.newRound()}>
@@ -462,31 +323,27 @@ function EndedView({ game, snap, now }: { game: GameApi; snap: GameSnapshot; now
 
 // ---------- Sheet ----------
 
-export function GameSheet({ game, geoStatus, position, onStartGps, onShowPlayer, onToast, onClose, prefillCode }: Props & { prefillCode: string }) {
+export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onStartGps, onShowPoint, onToast, onClose }: Props) {
   const { installed, canPrompt, ios, install } = useInstallPrompt();
   const snap = game.snapshot;
   const meta = snap?.meta ?? null;
-  const now = useNow(1000, !!meta);
   const inGame = !!game.session;
+  const stage = d?.stage;
 
-  const title = meta ? meta.name : inGame ? 'Verbinde …' : 'Das grosse Fangen';
+  const title = meta ? meta.name : inGame ? 'Verbinde …' : 'Versteckis Schweiz';
   const subtitle = meta
-    ? meta.phase === 'lobby'
-      ? `Lobby · Code ${snap!.code}`
-      : meta.phase === 'running'
-        ? `Läuft · Code ${snap!.code}`
-        : `Beendet · Code ${snap!.code}`
+    ? `${{ lobby: 'Lobby', draw: 'Auslosung', versus: 'Gleich geht’s los', hiding: 'Versteckzeit', seeking: 'Suche läuft', ended: 'Beendet' }[stage ?? 'lobby']} · Code ${snap!.code}`
     : inGame
       ? `Spiel ${game.session!.code}`
-      : 'Schweizweit mit Freunden';
+      : 'Das grosse Versteckspiel mit Freunden';
 
   return (
-    <BottomSheet title={title} subtitle={subtitle} label="Spiel" onClose={onClose}>
+    <BottomSheet title={title} subtitle={subtitle} label="Spiel" onClose={onClose} scrollKey={stage}>
       {inGame && geoStatus !== 'active' && (
         <div className="gps-warning">
           <span>
             {geoStatus === 'denied'
-              ? 'Standort ist blockiert. Erlaube ihn in den Einstellungen des Browsers, sonst sehen dich die anderen nicht.'
+              ? 'Standort ist blockiert. Erlaube ihn in den Browser-Einstellungen, sonst funktionieren Versteck und Power-ups nicht.'
               : 'Für das Spiel braucht es deinen Standort.'}
           </span>
           {geoStatus !== 'denied' && (
@@ -529,16 +386,24 @@ export function GameSheet({ game, geoStatus, position, onStartGps, onShowPlayer,
         </div>
       )}
 
-      {snap && meta && game.client && (
+      {snap && meta && game.client && d && (
         <>
           {snap.conn !== 'online' && <div className="banner inline-banner">Verbindung unterbrochen – wird neu aufgebaut …</div>}
-          {meta.phase === 'lobby' && <LobbyView game={game} snap={snap} position={position} now={now} onShowPlayer={onShowPlayer} onToast={onToast} />}
-          {meta.phase === 'running' && <RunningView game={game} snap={snap} position={position} now={now} onShowPlayer={onShowPlayer} />}
-          {meta.phase === 'ended' && <EndedView game={game} snap={snap} now={now} />}
-          <button
-            className="link inline leave"
-            onClick={() => window.confirm('Spiel verlassen?') && void game.leave()}
-          >
+          {stage === 'lobby' && <LobbyView game={game} snap={snap} position={position} now={now} onToast={onToast} />}
+          {(stage === 'draw' || stage === 'versus') && <p className="muted route-note">Die Auslosung läuft …</p>}
+          {(stage === 'hiding' || stage === 'seeking') &&
+            (d.teamOf(snap.me.id) === 'seeker' ? (
+              <SeekerView client={game.client} snap={snap} d={d} now={now} position={position} onShowPoint={onShowPoint} onToast={onToast} />
+            ) : (
+              <HiderView client={game.client} snap={snap} d={d} now={now} position={position} onShowPoint={onShowPoint} onToast={onToast} />
+            ))}
+          {stage === 'ended' && <ResultView game={game} snap={snap} d={d} onShowPoint={onShowPoint} />}
+          {meta.hostId === snap.me.id && (stage === 'hiding' || stage === 'seeking') && (
+            <button className="link inline leave" onClick={() => window.confirm('Spiel für alle beenden?') && game.client?.end('host')}>
+              Spiel für alle beenden
+            </button>
+          )}
+          <button className="link inline leave" onClick={() => window.confirm('Spiel verlassen?') && void game.leave()}>
             Spiel verlassen
           </button>
         </>
@@ -546,6 +411,13 @@ export function GameSheet({ game, geoStatus, position, onStartGps, onShowPlayer,
 
       {!inGame && (
         <>
+          <h3 className="section-title">So funktioniert’s</h3>
+          <ol className="how-to">
+            <li>Erstellt ein Spiel und ladet eure Freunde per Link ein. Ist die Lobby voll, lost das Glücksrad die Teams aus.</li>
+            <li>Die Verstecker haben die Versteckzeit, um ihr Versteck irgendwo in der Schweiz einzuloggen. Die Fänger warten und sammeln Punkte.</li>
+            <li>Danach kaufen die Fänger Power-ups wie «Karte halbieren» oder «Radar». Die App beantwortet sie automatisch und graut ausgeschlossene Gebiete aus.</li>
+            <li>Die Verstecker müssen regelmässig Challenges lösen. Mit den Punkten stellen sie Fallen. Wer das Versteck findet, tippt auf «Gefunden!».</li>
+          </ol>
           <h3 className="section-title">Vorbereitung</h3>
           <ul className="check-list">
             <li>
@@ -580,7 +452,7 @@ export function GameSheet({ game, geoStatus, position, onStartGps, onShowPlayer,
                     : ios
                       ? 'In Safari: Teilen-Symbol → «Zum Home-Bildschirm»'
                       : canPrompt
-                        ? 'Mit einem Tipp auf den Home-Bildschirm'
+                        ? 'Mit einem Klick auf Handy oder PC installieren'
                         : 'Im Browser-Menü «App installieren» wählen'}
                 </small>
               </span>
@@ -591,13 +463,6 @@ export function GameSheet({ game, geoStatus, position, onStartGps, onShowPlayer,
               )}
             </li>
           </ul>
-          <h3 className="section-title">So funktioniert’s</h3>
-          <ol className="how-to">
-            <li>Eine Person erstellt das Spiel und lädt die anderen per Link oder Code ein.</li>
-            <li>In der Lobby teilt ihr euch in Jäger und Gejagte auf und legt die Regeln fest.</li>
-            <li>Nach dem Start bekommen die Gejagten Vorsprung. Danach sehen die Jäger deren Standort bei jedem Ping.</li>
-            <li>Wer gefangen wird, tippt auf «Ich wurde gefangen» oder bestätigt den Fang des Jägers.</li>
-          </ol>
         </>
       )}
     </BottomSheet>

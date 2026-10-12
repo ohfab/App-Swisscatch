@@ -20,12 +20,34 @@ import type { Pin } from '../hooks/usePins';
 import type { Position } from '../hooks/useGeolocation';
 import { KIND_COLOR, type Connection, type Station } from '../lib/transport';
 import { stationEmoji } from './stationIcons';
+import type { Area } from '../game/derive';
+
+/** Kreis als Polygon (für Löcher in Flächen) */
+function circleRing(lat: number, lng: number, km: number, steps = 72): L.LatLngTuple[] {
+  const out: L.LatLngTuple[] = [];
+  const dLat = km / 111.32;
+  const dLng = km / (111.32 * Math.cos((lat * Math.PI) / 180));
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    out.push([lat + dLat * Math.sin(a), lng + dLng * Math.cos(a)]);
+  }
+  return out;
+}
+
+const WORLD: L.LatLngTuple[] = [
+  [40, -5],
+  [56, -5],
+  [56, 25],
+  [40, 25],
+];
+const AREA_STYLE: L.PolylineOptions = { pane: 'gameMask', interactive: false, stroke: false, fillColor: '#0f172a', fillOpacity: 0.42 };
+const EDGE_STYLE: L.PolylineOptions = { pane: 'gameMask', interactive: false, color: '#facc15', weight: 3, opacity: 0.95, dashArray: '8 6', fill: false };
 
 export interface GamePlayerMarker {
   id: string;
   name: string;
   color: string;
-  team: 'hunter' | 'runner';
+  team: 'seeker' | 'hider';
   lat: number;
   lng: number;
   kind: 'live' | 'ping';
@@ -48,6 +70,10 @@ export interface MapViewProps {
   route: Connection | null;
   /** Mitspieler im laufenden Spiel */
   gamePlayers: GamePlayerMarker[];
+  /** Für die Fänger: Gebiete, die durch Power-ups ausgeschlossen sind */
+  gameAreas: Area[];
+  /** Für die Verstecker: das eigene Versteck */
+  gameSpot: LatLng | null;
   onBasemapError?: () => void;
   onReady: (map: L.Map) => void;
   onTap: (p: LatLng, canton: CantonFeature | null) => void;
@@ -123,6 +149,8 @@ export function MapView(props: MapViewProps) {
   const baseLayerRef = useRef<L.Layer | null>(null);
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
   const gameLayerRef = useRef<L.LayerGroup | null>(null);
+  const areaLayerRef = useRef<L.LayerGroup | null>(null);
+  const spotLayerRef = useRef<L.LayerGroup | null>(null);
   const overlayLayersRef = useRef<Partial<Record<OverlayId, L.Layer>>>({});
   const cantonLayerRef = useRef<L.GeoJSON | null>(null);
   const cantonLabelsRef = useRef<L.LayerGroup | null>(null);
@@ -160,6 +188,8 @@ export function MapView(props: MapViewProps) {
     mask.style.pointerEvents = 'none';
     map.createPane('labels').style.zIndex = '450';
     map.getPane('labels')!.style.pointerEvents = 'none';
+    map.createPane('gameMask').style.zIndex = '360';
+    map.getPane('gameMask')!.style.pointerEvents = 'none';
     map.createPane('route').style.zIndex = '470';
     map.getPane('route')!.style.pointerEvents = 'none';
 
@@ -226,6 +256,8 @@ export function MapView(props: MapViewProps) {
       stationLayerRef.current = null;
       routeLayerRef.current = null;
       gameLayerRef.current = null;
+      areaLayerRef.current = null;
+      spotLayerRef.current = null;
       positionRef.current = null;
       selectionRef.current = null;
       hadFixRef.current = false;
@@ -425,7 +457,7 @@ export function MapView(props: MapViewProps) {
       L.marker([p.lat, p.lng], {
         interactive: false,
         keyboard: false,
-        zIndexOffset: p.team === 'hunter' ? 800 : 900,
+        zIndexOffset: p.team === 'seeker' ? 800 : 900,
         icon: L.divIcon({
           className: `gp-marker ${p.team} ${p.kind} ${p.caught ? 'caught' : ''} ${p.online ? '' : 'offline'}`,
           html: `<span class="gp-dot" style="background:${p.color}">${initial}</span><span class="gp-label">${label}</span>`,
@@ -435,6 +467,67 @@ export function MapView(props: MapViewProps) {
       }).addTo(group);
     }
   }, [props.gamePlayers]);
+
+  // Ausgeschlossene Gebiete (Fänger)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    areaLayerRef.current ??= L.layerGroup().addTo(map);
+    const group = areaLayerRef.current;
+    group.clearLayers();
+    let cancelled = false;
+    for (const a of props.gameAreas) {
+      if (a.kind === 'circle') {
+        const ring = circleRing(a.lat, a.lng, a.km);
+        L.polygon(a.inside ? [WORLD, ring] : [ring], AREA_STYLE).addTo(group);
+        L.polygon([ring], EDGE_STYLE).addTo(group);
+      } else if (a.kind === 'half') {
+        const [s0, n0, w0, e0] = [40, 56, -5, 25];
+        const rect: L.LatLngTuple[] =
+          a.side === 'north'
+            ? [[s0, w0], [a.lat, w0], [a.lat, e0], [s0, e0]]
+            : a.side === 'south'
+              ? [[a.lat, w0], [n0, w0], [n0, e0], [a.lat, e0]]
+              : a.side === 'east'
+                ? [[s0, w0], [n0, w0], [n0, a.lng], [s0, a.lng]]
+                : [[s0, a.lng], [n0, a.lng], [n0, e0], [s0, e0]];
+        L.polygon(rect, AREA_STYLE).addTo(group);
+        const line: L.LatLngTuple[] = a.axis === 'ns' ? [[a.lat, w0], [a.lat, e0]] : [[s0, a.lng], [n0, a.lng]];
+        L.polyline(line, EDGE_STYLE).addTo(group);
+      } else if (a.kind === 'canton') {
+        loadCantons()
+          .then((data) => {
+            if (cancelled) return;
+            const f = data.features.find((x) => x.properties.abbr === a.abbr);
+            if (!f) return;
+            const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+            const holes = polys.map((rings) => rings[0]!.map(([lng, lat]) => [lat!, lng!] as L.LatLngTuple));
+            L.polygon([WORLD, ...holes], AREA_STYLE).addTo(group);
+            for (const h of holes) L.polygon([h], EDGE_STYLE).addTo(group);
+          })
+          .catch(() => undefined);
+      }
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [props.gameAreas]);
+
+  // Eigenes Versteck (Verstecker)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    spotLayerRef.current ??= L.layerGroup().addTo(map);
+    const group = spotLayerRef.current;
+    group.clearLayers();
+    if (!props.gameSpot) return;
+    L.marker(props.gameSpot, {
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 700,
+      icon: L.divIcon({ className: 'spot-marker', html: '<span class="spot-pulse"></span><span class="spot-icon">🏠</span><span class="spot-label">Versteck</span>', iconSize: [44, 44], iconAnchor: [22, 22] }),
+    }).addTo(group);
+  }, [props.gameSpot?.lat, props.gameSpot?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Gewählte ÖV-Verbindung
   useEffect(() => {

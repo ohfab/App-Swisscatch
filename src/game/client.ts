@@ -1,8 +1,10 @@
 import type { MqttClient } from 'mqtt';
 import { brokerUrl, TOPIC_PREFIX } from './config';
 import { deriveRoom, open, seal, type Room } from './crypto';
-import { gameEnd, isOnline, nextPingAt, pingIndex, sendsLive, teamOf } from './rules';
-import type { Fix, GameEvent, GameMeta, GameSettings, Me, PlayerState, Team } from './types';
+import { isOnline } from './rules';
+import { derive, drawDuration, VERSUS_MS } from './derive';
+import { powerUp, rng, trap } from './content';
+import type { Action, DrawInfo, Fix, GameMeta, GameSettings, Me, PlayerState, SpotFacts, Team } from './types';
 import { distanceMeters } from '../lib/geo';
 
 export type ConnState = 'connecting' | 'online' | 'offline';
@@ -13,19 +15,22 @@ export interface GameSnapshot {
   conn: ConnState;
   meta: GameMeta | null;
   players: Record<string, PlayerState>;
+  /** Fotos nach ID (Daten-URL) */
+  photos: Record<string, string>;
   /** Spiel unter diesem Code nicht gefunden */
   notFound: boolean;
-  /** Jemand behauptet, mich gefangen zu haben */
-  claim: { by: string; t: number } | null;
-  /** Letzte Meldung für einen Hinweis (z.B. «Lisa wurde gefangen») */
+  /** Letzte Meldung für einen Hinweis */
   notice: { text: string; t: number } | null;
 }
 
-type MetaWithRev = GameMeta & { rev: number };
+/** Was eine neue Aktion braucht; ID, Zeit und Runde ergänzt der Client */
+export type NewAction = Action extends infer A ? (A extends Action ? Omit<A, 'id' | 't' | 'round'> : never) : never;
 
 const LIVE_MIN_INTERVAL = 10_000;
 const LIVE_MIN_MOVE = 25;
 const HEARTBEAT = 30_000;
+
+const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 export class GameClient {
   private snap: GameSnapshot;
@@ -36,19 +41,18 @@ export class GameClient {
   private mine: PlayerState;
   private lastFix: Fix | null = null;
   private lastLive: { fix: Fix; at: number } | null = null;
-  private lastPingSent = -1;
-  private pingTimer: number | null = null;
   private intervals: number[] = [];
   private closed = false;
   private create: { name: string; settings: GameSettings } | null;
   private rev = 0;
   private restored = false;
+  private autoSpotTried = false;
 
   constructor(code: string, me: Me, create?: { name: string; settings: GameSettings }) {
     this.create = create ?? null;
     const now = Date.now();
-    this.mine = { v: 1, id: me.id, name: me.name, color: me.color, joinedAt: now, seen: now };
-    this.snap = { code, me, conn: 'connecting', meta: null, players: {}, notFound: false, claim: null, notice: null };
+    this.mine = { v: 2, id: me.id, name: me.name, color: me.color, joinedAt: now, seen: now, actions: [] };
+    this.snap = { code, me, conn: 'connecting', meta: null, players: {}, photos: {}, notFound: false, notice: null };
   }
 
   // ---------- Zustand für React ----------
@@ -65,20 +69,30 @@ export class GameClient {
     this.listeners.forEach((l) => l());
   }
 
-  private notify(text: string) {
+  private notify(text: string, vibrate = false) {
     this.set({ notice: { text, t: Date.now() } });
+    if (vibrate) navigator.vibrate?.([120, 60, 120]);
   }
 
-  get meta(): MetaWithRev | null {
-    return this.snap.meta as MetaWithRev | null;
-  }
-
-  get myTeam(): Team {
-    return teamOf(this.snap.meta, this.mine.id);
+  get meta(): GameMeta | null {
+    return this.snap.meta;
   }
 
   get isHost(): boolean {
     return this.snap.meta?.hostId === this.mine.id;
+  }
+
+  teamOf(id: string): Team {
+    return this.snap.meta?.draw?.hiders.includes(id) && this.snap.meta.phase !== 'lobby' ? 'hider' : 'seeker';
+  }
+
+  get myTeam(): Team {
+    return this.teamOf(this.mine.id);
+  }
+
+  /** Abgeleiteter Spielstand (ohne Quizfragen, die brauchen Kantonsdaten) */
+  derived(now = Date.now()) {
+    return derive(this.snap.meta, this.snap.players, now, null);
   }
 
   // ---------- Verbindung ----------
@@ -106,8 +120,6 @@ export class GameClient {
           this.restored = true;
           void this.publishMe();
         }, 1200);
-        // Gespeicherte Nachrichten kommen direkt nach dem Abonnieren. Fehlt danach das Spiel,
-        // wird es neu angelegt (beim Erstellen) oder als «nicht gefunden» gemeldet.
         window.setTimeout(() => {
           if (this.closed || this.snap.meta) return;
           if (this.create) void this.publishMeta(this.initialMeta());
@@ -121,26 +133,25 @@ export class GameClient {
     mq.on('message', (topic, payload) => void this.onMessage(topic, payload.toString()));
 
     this.intervals.push(window.setInterval(() => void this.publishMe(), HEARTBEAT));
-    this.intervals.push(window.setInterval(() => this.tick(), 5000));
+    this.intervals.push(window.setInterval(() => this.tick(), 3000));
   }
 
   close() {
     this.closed = true;
     this.intervals.forEach((i) => window.clearInterval(i));
-    if (this.pingTimer) window.clearTimeout(this.pingTimer);
     this.mq?.end(true);
     this.listeners.clear();
   }
 
-  private initialMeta(): MetaWithRev {
+  private initialMeta(): GameMeta {
     return {
-      v: 1,
+      v: 2,
       rev: 0,
+      round: 1,
       name: this.create?.name || 'SwissCatch',
       hostId: this.mine.id,
       phase: 'lobby',
-      settings: this.create?.settings ?? (undefined as never),
-      teams: { [this.mine.id]: 'hunter' },
+      settings: this.create!.settings,
       createdAt: Date.now(),
     };
   }
@@ -159,15 +170,11 @@ export class GameClient {
     await this.publish(`p/${this.mine.id}`, this.mine, true);
   }
 
-  private async publishMeta(meta: MetaWithRev) {
+  private async publishMeta(meta: GameMeta) {
     this.rev = Math.max(this.rev, meta.rev) + 1;
     const next = { ...meta, rev: this.rev };
     this.applyMeta(next);
     await this.publish('meta', next, true);
-  }
-
-  private async sendEvent(e: GameEvent) {
-    await this.publish('e', e, false);
   }
 
   // ---------- Eingehende Nachrichten ----------
@@ -175,6 +182,12 @@ export class GameClient {
   private async onMessage(topic: string, payload: string) {
     if (!this.room || !topic.startsWith(this.base + '/')) return;
     const rel = topic.slice(this.base.length + 1);
+    if (rel.startsWith('img/')) {
+      if (!payload) return;
+      const img = await open<{ id: string; data: string }>(this.room.key, payload);
+      if (img?.data.startsWith('data:image/')) this.set({ photos: { ...this.snap.photos, [img.id]: img.data } });
+      return;
+    }
     if (rel.startsWith('p/')) {
       const id = rel.slice(2);
       if (payload === '') {
@@ -184,92 +197,65 @@ export class GameClient {
         return;
       }
       const p = await open<PlayerState>(this.room.key, payload);
-      if (!p || p.id !== id) return;
+      if (!p || p.id !== id || p.v !== 2) return;
+      p.actions ??= [];
       if (id === this.mine.id) {
-        // Eigener gespeicherter Stand nach dem Neuladen: Beitrittszeit, Ping und Fang übernehmen
+        // Eigener gespeicherter Stand nach dem Neuladen übernehmen
         if (!this.restored) {
           this.restored = true;
           this.mine = { ...p, name: this.mine.name, color: this.mine.color, seen: Date.now() };
-          this.lastPingSent = p.ping?.n ?? -1;
           void this.publishMe();
         }
         return;
       }
       const prev = this.snap.players[id];
       if (prev && prev.seen > p.seen) return; // ältere Nachricht, die verspätet entschlüsselt wurde
-      if (prev && !prev.caughtAt && p.caughtAt) this.notify(`${p.name} wurde gefangen!`);
+      this.announce(prev, p);
       this.set({ players: { ...this.snap.players, [id]: p } });
       if (this.isHost) this.hostSync();
       return;
     }
     if (rel === 'meta') {
       if (payload === '') return;
-      const m = await open<MetaWithRev>(this.room.key, payload);
-      if (!m || (this.meta && m.rev < this.meta.rev)) return;
+      const m = await open<GameMeta>(this.room.key, payload);
+      if (!m || m.v !== 2 || (this.meta && m.rev < this.meta.rev)) return;
       this.rev = Math.max(this.rev, m.rev);
       this.applyMeta(m);
-      return;
-    }
-    if (rel === 'e') {
-      const e = await open<GameEvent>(this.room.key, payload);
-      if (e && e.from !== this.mine.id) this.onEvent(e);
     }
   }
 
-  private applyMeta(m: MetaWithRev) {
+  /** Neue Aktionen anderer Spieler als kurze Meldung zeigen */
+  private announce(prev: PlayerState | undefined, p: PlayerState) {
+    const m = this.snap.meta;
+    if (!prev || !m || m.phase !== 'running') return;
+    const known = new Set(prev.actions.map((a) => a.id));
+    const fresh = p.actions.filter((a) => !known.has(a.id) && a.round === m.round);
+    const mineTeam = this.myTeam;
+    const theirTeam = this.teamOf(p.id);
+    for (const a of fresh) {
+      if (a.kind === 'trap' && mineTeam === 'seeker') this.notify(`${trap(a.type).icon} Falle! ${trap(a.type).name}: ${trap(a.type).effect}`, true);
+      else if (a.kind === 'powerup' && mineTeam === 'hider') this.notify(`${powerUp(a.type).icon} Die Fänger nutzen «${powerUp(a.type).name}».`, a.type === 'photo');
+      else if (a.kind === 'powerup' && mineTeam === 'seeker') this.notify(`${powerUp(a.type).icon} ${p.name} hat «${powerUp(a.type).name}» gekauft.`);
+      else if (a.kind === 'challenge' && theirTeam === mineTeam) this.notify(`✅ ${p.name} hat die Challenge erledigt.`);
+      else if (a.kind === 'challenge' && mineTeam === 'seeker') this.notify('🕵️ Neuer Hinweis von den Versteckern!');
+      else if (a.kind === 'photo-answer' && mineTeam === 'seeker') this.notify('📸 Die Verstecker haben ein Foto geschickt!');
+      else if (a.kind === 'spot' && mineTeam === 'seeker') this.notify('🏠 Die Verstecker haben ihr Versteck eingeloggt.');
+      else if (a.kind === 'found') this.notify(`🎯 ${p.name} meldet: Gefunden!`, true);
+    }
+  }
+
+  private applyMeta(m: GameMeta) {
     const prev = this.snap.meta;
     this.set({ meta: m, notFound: false });
     // Spiel gefunden: jetzt dem Spiel beitreten (nach dem Wiederherstellen des eigenen Stands)
     if (!prev) window.setTimeout(() => void this.publishMe(), this.restored ? 0 : 1300);
-    if (prev?.phase !== m.phase) this.onPhaseChange(prev?.phase, m);
-    if (prev && prev.teams[this.mine.id] !== m.teams[this.mine.id] && prev.phase !== 'lobby') {
-      this.notify(m.teams[this.mine.id] === 'hunter' ? 'Du bist jetzt Jäger!' : 'Du bist jetzt gejagt!');
+    // Neue Runde: eigene Aktionen der alten Runde verwerfen
+    if (this.mine.actions.some((a) => a.round !== m.round)) {
+      this.mine = { ...this.mine, actions: this.mine.actions.filter((a) => a.round === m.round) };
+      this.autoSpotTried = false;
+      void this.publishMe();
     }
-    this.schedulePing();
-    this.maybePing();
     if (this.isHost) this.hostSync();
-  }
-
-  private onPhaseChange(prev: GameMeta['phase'] | undefined, m: GameMeta) {
-    if (m.phase === 'running' && prev === 'lobby') {
-      this.lastPingSent = -1;
-      // Gejagte senden ab jetzt keinen Live-Standort mehr
-      if (!sendsLive(m, this.myTeam)) {
-        const { pos: _p, ...rest } = this.mine;
-        this.mine = rest as PlayerState;
-      }
-      this.mine = { ...this.mine, ping: undefined, caughtAt: undefined, caughtBy: undefined };
-      void this.publishMe();
-      if (prev) this.notify(m.settings.headStartMin > 0 ? `Los! ${m.settings.headStartMin} Min Vorsprung für die Gejagten.` : 'Los geht’s!');
-    }
-    if (m.phase === 'lobby' && prev && prev !== 'lobby') {
-      this.mine = { ...this.mine, ping: undefined, caughtAt: undefined, caughtBy: undefined };
-      void this.publishMe();
-    }
-    if (m.phase === 'ended' && prev === 'running') {
-      this.notify(m.endReason === 'all-caught' ? 'Alle gefangen – die Jäger gewinnen!' : m.endReason === 'time' ? 'Zeit um – die Gejagten gewinnen!' : 'Das Spiel wurde beendet.');
-    }
-  }
-
-  private onEvent(e: GameEvent) {
-    const name = (id: string) => this.snap.players[id]?.name ?? 'Jemand';
-    switch (e.type) {
-      case 'team-request':
-        if (this.isHost && this.meta?.phase === 'lobby') this.setTeam(e.from, e.team);
-        break;
-      case 'caught':
-        if (this.isHost) this.hostSync();
-        break;
-      case 'catch-claim':
-        if (e.target === this.mine.id && !this.mine.caughtAt) {
-          this.set({ claim: { by: e.from, t: e.t } });
-          navigator.vibrate?.([200, 100, 200]);
-        }
-        break;
-      case 'catch-denied':
-        if (e.to === this.mine.id) this.notify(`${name(e.from)} sagt: nicht gefangen.`);
-        break;
-    }
   }
 
   // ---------- Standort ----------
@@ -277,59 +263,45 @@ export class GameClient {
   setPosition(fix: Fix | null) {
     this.lastFix = fix;
     if (!fix || this.closed) return;
-    const m = this.snap.meta;
-    if (sendsLive(m, this.myTeam) && !this.mine.caughtAt) {
-      const last = this.lastLive;
-      const due =
-        !last || Date.now() - last.at > LIVE_MIN_INTERVAL || distanceMeters(last.fix, fix) > LIVE_MIN_MOVE * 4;
-      const moved = !last || distanceMeters(last.fix, fix) > LIVE_MIN_MOVE || Date.now() - last.at > HEARTBEAT;
-      if (due && moved) {
-        this.lastLive = { fix, at: Date.now() };
-        this.mine = { ...this.mine, pos: fix };
-        void this.publishMe();
-      }
+    const last = this.lastLive;
+    const due = !last || Date.now() - last.at > LIVE_MIN_INTERVAL || distanceMeters(last.fix, fix) > LIVE_MIN_MOVE * 4;
+    const moved = !last || distanceMeters(last.fix, fix) > LIVE_MIN_MOVE || Date.now() - last.at > HEARTBEAT;
+    if (due && moved) {
+      this.lastLive = { fix, at: Date.now() };
+      this.mine = { ...this.mine, pos: fix };
+      void this.publishMe();
     }
-    this.maybePing();
   }
 
-  /** Nach dem Zurückkehren in die App: verpasste Pings sofort nachholen */
+  get position(): Fix | null {
+    return this.lastFix;
+  }
+
+  /** Nach dem Zurückkehren in die App sofort aktualisieren */
   resume() {
-    this.maybePing();
     void this.publishMe();
-  }
-
-  private maybePing() {
-    const m = this.snap.meta;
-    if (!m || m.phase !== 'running' || !this.lastFix || this.mine.caughtAt) return;
-    const team = this.myTeam;
-    const pings = team === 'runner' || m.settings.hunterVisibility === 'ping';
-    if (!pings) return;
-    const n = pingIndex(m);
-    if (n < 0 || n <= this.lastPingSent) return;
-    this.lastPingSent = n;
-    this.mine = { ...this.mine, ping: { ...this.lastFix, n } };
-    void this.publishMe();
-  }
-
-  private schedulePing() {
-    if (this.pingTimer) window.clearTimeout(this.pingTimer);
-    this.pingTimer = null;
-    const m = this.snap.meta;
-    const at = m ? nextPingAt(m) : null;
-    if (at === null) return;
-    this.pingTimer = window.setTimeout(() => {
-      this.maybePing();
-      if (this.myTeam === 'hunter') this.notify('📡 Neue Standorte der Gejagten');
-      navigator.vibrate?.(150);
-      this.schedulePing();
-    }, Math.max(0, at - Date.now()) + 800);
+    this.tick();
   }
 
   // ---------- Aktionen ----------
 
-  requestTeam(team: Team) {
-    if (this.isHost) this.setTeam(this.mine.id, team);
-    else void this.sendEvent({ type: 'team-request', from: this.mine.id, team, t: Date.now() });
+  addAction(a: NewAction): Action {
+    const m = this.snap.meta;
+    const action = { ...a, id: newId(), t: Date.now(), round: m?.round ?? 1 } as Action;
+    this.mine = { ...this.mine, actions: [...this.mine.actions, action] };
+    void this.publishMe();
+    return action;
+  }
+
+  async uploadPhoto(dataUrl: string): Promise<string> {
+    const id = newId();
+    this.set({ photos: { ...this.snap.photos, [id]: dataUrl } });
+    await this.publish(`img/${id}`, { id, data: dataUrl }, true);
+    return id;
+  }
+
+  logSpot(fix: Fix, facts: SpotFacts, auto = false) {
+    this.addAction({ kind: 'spot', fix, facts, ...(auto ? { auto: true } : {}) });
   }
 
   rename(name: string) {
@@ -338,33 +310,7 @@ export class GameClient {
     void this.publishMe();
   }
 
-  reportCaught(by?: string) {
-    if (this.mine.caughtAt) return;
-    this.mine = { ...this.mine, caughtAt: Date.now(), ...(by ? { caughtBy: by } : {}) };
-    this.set({ claim: null });
-    void this.publishMe();
-    void this.sendEvent({ type: 'caught', from: this.mine.id, ...(by ? { by } : {}), t: Date.now() });
-  }
-
-  claimCatch(target: string) {
-    void this.sendEvent({ type: 'catch-claim', from: this.mine.id, target, t: Date.now() });
-    this.notify(`Fang gemeldet – ${this.snap.players[target]?.name ?? 'Spieler'} muss bestätigen.`);
-  }
-
-  denyClaim() {
-    const c = this.snap.claim;
-    if (!c) return;
-    this.set({ claim: null });
-    void this.sendEvent({ type: 'catch-denied', from: this.mine.id, to: c.by, t: Date.now() });
-  }
-
-  // Host-Aktionen
-
-  setTeam(id: string, team: Team) {
-    const m = this.meta;
-    if (!m || !this.isHost) return;
-    void this.publishMeta({ ...m, teams: { ...m.teams, [id]: team } });
-  }
+  // ---------- Host-Aktionen ----------
 
   updateSettings(patch: Partial<GameSettings>) {
     const m = this.meta;
@@ -372,16 +318,36 @@ export class GameClient {
     void this.publishMeta({ ...m, settings: { ...m.settings, ...patch } });
   }
 
-  renameGame(name: string) {
-    const m = this.meta;
-    if (!m || !this.isHost) return;
-    void this.publishMeta({ ...m, name });
-  }
-
-  start() {
+  /** Teams auslosen: Hälfte Verstecker (abgerundet), Rest Fänger */
+  /** Host: Teams auslosen. Mit `swap` verstecken sich die Fänger der letzten Runde. */
+  draw(swap = false) {
     const m = this.meta;
     if (!m || !this.isHost || m.phase !== 'lobby') return;
-    void this.publishMeta({ ...m, phase: 'running', startedAt: Date.now(), endedAt: undefined, endReason: undefined });
+    const ids = Object.values(this.snap.players)
+      .filter((p) => isOnline(p) || p.id === this.mine.id)
+      .sort((a, b) => a.joinedAt - b.joinedAt)
+      .map((p) => p.id);
+    if (ids.length < 2) return;
+    const seed = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
+    const r = rng(seed);
+    const order = [...ids];
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(r() * (i + 1));
+      [order[i], order[j]] = [order[j]!, order[i]!];
+    }
+    const count = Math.floor(ids.length / 2);
+    const last = m.lastHiders ?? [];
+    // Beim Tauschen zuerst die bisherigen Fänger ziehen, Rest zufällig
+    const preferred = swap ? order.filter((id) => !last.includes(id)) : [];
+    const pool = order.filter((id) => !preferred.includes(id));
+    const hiders: string[] = [];
+    while (hiders.length < count) {
+      const from = preferred.length ? preferred : pool;
+      hiders.push(from.splice(Math.floor(r() * from.length), 1)[0]!);
+    }
+    const at = Date.now() + 1500;
+    const draw: DrawInfo = { seed, order, hiders, at };
+    void this.publishMeta({ ...m, phase: 'running', draw, startedAt: at + drawDuration(hiders.length) + VERSUS_MS, endedAt: undefined, endReason: undefined });
   }
 
   end(reason: GameMeta['endReason'] = 'host') {
@@ -393,7 +359,7 @@ export class GameClient {
   newRound() {
     const m = this.meta;
     if (!m || !this.isHost) return;
-    void this.publishMeta({ ...m, phase: 'lobby', startedAt: undefined, endedAt: undefined, endReason: undefined });
+    void this.publishMeta({ ...m, round: m.round + 1, phase: 'lobby', draw: undefined, startedAt: undefined, endedAt: undefined, endReason: undefined, lastHiders: m.draw?.hiders ?? m.lastHiders });
   }
 
   async leave() {
@@ -408,45 +374,40 @@ export class GameClient {
     window.setTimeout(() => this.close(), 300);
   }
 
-  // ---------- Host-Logik ----------
+  // ---------- Automatik ----------
 
-  /** Neue Spieler einteilen, Gefangene umteilen, Spielende erkennen */
+  /** Host: Lobby voll → auslosen; Spielende festhalten */
   private hostSync() {
     const m = this.meta;
     if (!m || !this.isHost) return;
-    const teams = { ...m.teams };
-    let changed = false;
-    for (const p of Object.values(this.snap.players)) {
-      if (!teams[p.id]) {
-        teams[p.id] = 'runner';
-        changed = true;
-      }
-      if (m.phase === 'running' && p.caughtAt && m.settings.caughtBecomeHunters && teams[p.id] === 'runner') {
-        teams[p.id] = 'hunter';
-        changed = true;
-      }
-    }
-    if (changed) {
-      void this.publishMeta({ ...m, teams });
+    if (m.phase === 'lobby') {
+      const online = Object.values(this.snap.players).filter((p) => isOnline(p) || p.id === this.mine.id);
+      // Automatisch nur in der ersten Runde; danach lost der Host von Hand aus
+      if (m.round === 1 && online.length >= m.settings.maxPlayers) this.draw();
       return;
     }
-    if (m.phase === 'running') this.checkEnd(m);
-  }
-
-  private checkEnd(m: MetaWithRev) {
-    if (Date.now() >= gameEnd(m)) {
-      this.end('time');
-      return;
+    if (m.phase === 'running') {
+      const d = this.derived();
+      if (d?.result) void this.publishMeta({ ...m, phase: 'ended', endedAt: d.result.at, endReason: d.result.reason });
     }
-    const players = Object.values(this.snap.players);
-    const runners = players.filter((p) => m.teams[p.id] === 'runner' || p.caughtAt);
-    const free = runners.filter((p) => m.teams[p.id] === 'runner' && !p.caughtAt);
-    if (runners.length > 0 && free.length === 0) this.end('all-caught');
   }
 
   private tick() {
     const m = this.meta;
     if (!m || this.closed) return;
+    // Versteckzeit abgelaufen ohne Versteck: aktuellen Standort automatisch einloggen
+    const d = this.derived();
+    if (d && d.stage === 'seeking' && !d.spot && this.myTeam === 'hider' && this.lastFix && !this.autoSpotTried) {
+      this.autoSpotTried = true;
+      const delay = Math.max(0, d.hiders.indexOf(this.mine.id)) * 4000;
+      const fix = this.lastFix;
+      window.setTimeout(async () => {
+        if (this.derived()?.spot) return;
+        const { spotFacts } = await import('./facts');
+        const facts = await spotFacts(fix);
+        if (!this.derived()?.spot) this.logSpot(fix, facts, true);
+      }, delay);
+    }
     if (this.isHost) {
       this.hostSync();
       return;

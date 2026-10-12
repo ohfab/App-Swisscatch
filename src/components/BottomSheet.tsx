@@ -14,6 +14,8 @@ interface Props {
   /** Verkleinert (nur Titel sichtbar); ohne Angabe verwaltet das Sheet das selbst */
   peek?: boolean;
   onPeekChange?: (peek: boolean) => void;
+  /** Ändert sich der Wert, springt der Inhalt wieder nach oben */
+  scrollKey?: string | number;
 }
 
 /**
@@ -28,6 +30,11 @@ export function BottomSheet(props: Props) {
   const [dragY, setDragY] = useState(0);
   const start = useRef<number | null>(null);
   const moved = useRef(false);
+  const body = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    body.current?.scrollTo({ top: 0 });
+  }, [props.scrollKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -93,7 +100,7 @@ export function BottomSheet(props: Props) {
           <CloseIcon size={20} />
         </button>
       </header>
-      <div className="sheet-body" hidden={peek}>
+      <div className="sheet-body" hidden={peek} ref={body}>
         {children}
       </div>
     </section>
