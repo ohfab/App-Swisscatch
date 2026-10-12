@@ -1,6 +1,6 @@
 /**
  * Grafische Bausteine im Tinte-und-Pfirsich-Stil:
- * tropfende Kanten und das Blob-Maskottchen «Blobi».
+ * tropfende Kanten und Geisti, der Geist von Zeitgeist.
  */
 
 const DRIP_PATH =
@@ -23,61 +23,157 @@ export function Drips({ className = '', flip = false }: { className?: string; fl
   );
 }
 
-type BlobColor = 'ink' | 'peach' | 'white';
+export type GhostMood = 'happy' | 'cheer' | 'wink' | 'sad' | 'surprised' | 'think' | 'sleep' | 'hide' | 'love' | 'cool';
+export type GhostColor = 'white' | 'peach';
 
-const BODY =
-  'M18 60 C18 29 38 10 60 10 C82 10 102 29 102 60 L102 90 C102 97 97 99 94 95 C91 91 89 103 84 103 ' +
-  'C78 103 79 91 74 91 C69 91 70 109 63 109 C56 109 58 94 53 94 C48 94 49 100 44 100 C38 100 40 89 35 89 ' +
-  'C30 89 31 97 26 97 C21 97 18 93 18 88 Z';
+const GHOST_BODY =
+  'M24 56 C24 32 40 15 60 15 C80 15 96 32 96 56 C96 72 98 84 101 95 A10.25 10.25 0 0 1 80.5 95 A10.25 10.25 0 0 1 60 95 A10.25 10.25 0 0 1 39.5 95 A10.25 10.25 0 0 1 19 95 C22 84 24 72 24 56 Z';
+const HEART = (x: number, y: number) => `M${x} ${y + 6} C${x - 9} ${y} ${x - 7} ${y - 7} ${x} ${y - 3} C${x + 7} ${y - 7} ${x + 9} ${y} ${x} ${y + 6} Z`;
 
 /**
- * Blobi, das Maskottchen. Blinzelt und schaut umher.
- * `hiding`: Augen zu (Verstecker), `magnifier`: mit Lupe (Fänger).
+ * Geisti, der Geist von Zeitgeist. Schwebt, blinzelt und schaut umher.
+ * `mood` bestimmt das Gesicht, dazu Lupe (Fänger), Partyhut und Winken.
+ * `talking` bewegt den Mund (beim Sprechen in der Einführung).
  */
-export function Blob({
+export function Ghost({
   size = 96,
-  color = 'ink',
-  hiding = false,
+  mood = 'happy',
+  color = 'white',
   magnifier = false,
+  party = false,
+  wave = false,
+  talking = false,
+  shadow = true,
   className = '',
 }: {
   size?: number;
-  color?: BlobColor;
-  hiding?: boolean;
+  mood?: GhostMood;
+  color?: GhostColor;
   magnifier?: boolean;
+  party?: boolean;
+  wave?: boolean;
+  talking?: boolean;
+  shadow?: boolean;
   className?: string;
 }) {
-  const eye = color === 'white' ? 'var(--ink)' : '#fff';
-  const pupil = color === 'white' ? '#fff' : 'var(--ink)';
+  const ink = { fill: 'var(--ink)' };
+  const line = { stroke: 'var(--ink)', strokeWidth: 3.2, strokeLinecap: 'round' as const, fill: 'none' };
+  const armsUp = mood === 'cheer';
+  const openEyes = !['wink', 'sleep', 'hide', 'love', 'cool'].includes(mood);
+
+  let mouth;
+  if (mood === 'cheer' || mood === 'love') {
+    mouth = (
+      <g>
+        <path d="M52 64 Q60 78 68 64 Z" style={ink} strokeLinejoin="round" />
+        <ellipse cx="60" cy="70.5" rx="4" ry="2.4" className="ghost-tongue" />
+      </g>
+    );
+  } else if (mood === 'sad') mouth = <path d="M54 71 Q60 65 66 71" style={line} />;
+  else if (mood === 'surprised') mouth = <ellipse cx="60" cy="69" rx="4" ry="5" style={ink} />;
+  else if (mood === 'think') mouth = <path d="M56 69 Q61 67 66 68" style={line} />;
+  else if (mood === 'sleep') mouth = <ellipse cx="60" cy="68" rx="2.6" ry="2" style={ink} />;
+  else mouth = <path d="M53 65 Q60 72 67 65" style={line} />;
+
   return (
-    <svg className={`blob blob-${color} ${className}`} width={size} height={size} viewBox="0 0 120 120" aria-hidden="true">
-      <g className="blob-body">
-        <path d={BODY} className="blob-fill" />
-        {hiding ? (
-          <g className="blob-closed" style={{ stroke: eye }} strokeWidth="4.5" strokeLinecap="round" fill="none">
-            <path d="M36 54 Q45 46 54 54" />
-            <path d="M66 54 Q75 46 84 54" />
-          </g>
-        ) : (
-          <g className="blob-eyes">
-            <ellipse cx="45" cy="52" rx="12" ry="13" style={{ fill: eye }} />
-            <ellipse cx="75" cy="52" rx="12" ry="13" style={{ fill: eye }} />
-            <g className="blob-pupils" style={{ fill: pupil }}>
-              <circle cx="47" cy="54" r="6" />
-              <circle cx="77" cy="54" r="6" />
-            </g>
+    <svg className={`ghost ghost-${color} mood-${mood} ${className}`} width={size} height={size} viewBox="0 0 120 120" aria-hidden="true">
+      {shadow && <ellipse className="ghost-shadow" cx="60" cy="114" rx="22" ry="4" />}
+      <g className="ghost-float">
+        {party && (
+          <g className="ghost-hat">
+            <path d="M48 22 L60 -6 L72 22 Z" fill="var(--peach)" style={{ stroke: 'var(--ink)' }} strokeWidth="3" strokeLinejoin="round" />
+            <path d="M53 11 L67 11 M50.5 17 L69.5 17" style={{ stroke: 'var(--ink)' }} strokeWidth="2.4" />
+            <circle cx="60" cy="-7" r="4.5" fill="#fff" style={{ stroke: 'var(--ink)' }} strokeWidth="2.5" />
           </g>
         )}
-        <ellipse cx="33" cy="70" rx="6" ry="4" className="blob-cheek" />
-        <ellipse cx="87" cy="70" rx="6" ry="4" className="blob-cheek" />
-        <path d="M53 72 Q60 79 67 72" style={{ stroke: eye }} strokeWidth="3.5" strokeLinecap="round" fill="none" />
-      </g>
-      {magnifier && (
-        <g className="blob-magnifier">
-          <line x1="99" y1="96" x2="112" y2="110" style={{ stroke: 'var(--ink)' }} strokeWidth="7" strokeLinecap="round" />
-          <circle cx="91" cy="86" r="14" fill="rgba(255,255,255,0.55)" style={{ stroke: 'var(--ink)' }} strokeWidth="5" />
+        {/* Arme hinter dem Körper */}
+        <g className="ghost-arms">
+          <ellipse className="ghost-fill" cx={armsUp ? 16 : 22} cy={armsUp ? 52 : 70} rx="8" ry="5.5" transform={`rotate(${armsUp ? 35 : -25} ${armsUp ? 16 : 22} ${armsUp ? 52 : 70})`} />
+          <g className={wave ? 'ghost-wave' : ''}>
+            <ellipse
+              className="ghost-fill"
+              cx={armsUp || wave ? 104 : 98}
+              cy={armsUp || wave ? 52 : 70}
+              rx="8"
+              ry="5.5"
+              transform={`rotate(${armsUp || wave ? -35 : 25} ${armsUp || wave ? 104 : 98} ${armsUp || wave ? 52 : 70})`}
+            />
+          </g>
         </g>
-      )}
+        <path d={GHOST_BODY} className="ghost-fill ghost-body" />
+        <g className="ghost-face">
+          {mood === 'sad' && (
+            <g style={line} strokeWidth="2.6">
+              <path d="M41 45 L53 41.5" />
+              <path d="M79 45 L67 41.5" />
+            </g>
+          )}
+          {mood === 'think' && <path d="M66 40 Q72 36 79 40" style={line} strokeWidth="2.6" />}
+          {openEyes && (
+            <g className="ghost-eyes">
+              <g className={mood === 'think' ? 'ghost-look-up' : 'ghost-look'}>
+                <ellipse cx="47.5" cy="53" rx="7.4" ry={mood === 'surprised' ? 11 : 9.6} style={ink} />
+                <ellipse cx="72.5" cy="53" rx="7.4" ry={mood === 'surprised' ? 11 : 9.6} style={ink} />
+                <circle cx="50.3" cy="49" r="2.9" fill="#fff" />
+                <circle cx="75.3" cy="49" r="2.9" fill="#fff" />
+                <circle cx="45" cy="57.5" r="1.3" fill="#fff" opacity="0.7" />
+                <circle cx="70" cy="57.5" r="1.3" fill="#fff" opacity="0.7" />
+              </g>
+            </g>
+          )}
+          {mood === 'wink' && (
+            <>
+              <path d="M42 55 Q48 49 54 55" style={line} />
+              <ellipse cx="72.5" cy="53" rx="7.4" ry="9.6" style={ink} />
+              <circle cx="75.3" cy="49" r="2.9" fill="#fff" />
+            </>
+          )}
+          {(mood === 'hide' || mood === 'sleep') && (
+            <g style={line}>
+              <path d={mood === 'hide' ? 'M42 55 Q48 49 54 55' : 'M42 53 Q48 58 54 53'} />
+              <path d={mood === 'hide' ? 'M66 55 Q72 49 78 55' : 'M66 53 Q72 58 78 53'} />
+            </g>
+          )}
+          {mood === 'love' && (
+            <g className="ghost-hearts" fill="var(--red)">
+              <path d={HEART(48, 53)} />
+              <path d={HEART(72, 53)} />
+            </g>
+          )}
+          {mood === 'cool' && (
+            <g>
+              <path d="M38 48 H82" style={line} strokeWidth="3" />
+              <rect x="38" y="47" width="19" height="12" rx="5" style={ink} />
+              <rect x="63" y="47" width="19" height="12" rx="5" style={ink} />
+              <path d="M42 51 L47 51" stroke="var(--peach)" strokeWidth="2" strokeLinecap="round" />
+              <path d="M67 51 L72 51" stroke="var(--peach)" strokeWidth="2" strokeLinecap="round" />
+            </g>
+          )}
+          <ellipse cx="38" cy="66" rx="5.5" ry="3.4" className="ghost-cheek" />
+          <ellipse cx="82" cy="66" rx="5.5" ry="3.4" className="ghost-cheek" />
+          {talking ? (
+            <g className="ghost-talk">
+              <path className="ghost-talk-a" d="M53 65 Q60 72 67 65" style={line} />
+              <path className="ghost-talk-b" d="M54 64 Q60 75 66 64 Z" style={ink} />
+            </g>
+          ) : (
+            mouth
+          )}
+          {mood === 'sad' && <path className="ghost-tear" d="M37 60 C34 65 34 68 37 68 C40 68 40 65 37 60 Z" fill="#7cc4ff" />}
+        </g>
+        {mood === 'sleep' && (
+          <g className="ghost-zz" style={ink} fontFamily="var(--font)" fontWeight="800">
+            <text x="92" y="22" fontSize="14">z</text>
+            <text x="102" y="10" fontSize="10">z</text>
+          </g>
+        )}
+        {magnifier && (
+          <g className="ghost-magnifier">
+            <line x1="100" y1="94" x2="113" y2="108" style={{ stroke: 'var(--ink)' }} strokeWidth="7" strokeLinecap="round" />
+            <circle cx="92" cy="84" r="14" fill="rgba(255,255,255,0.55)" style={{ stroke: 'var(--ink)' }} strokeWidth="5" />
+          </g>
+        )}
+      </g>
     </svg>
   );
 }

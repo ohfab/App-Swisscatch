@@ -298,6 +298,14 @@ const FACTS: FactSet[] = [
 const fmtFact = (v: number, f: FactSet) => `${f.step < 1 ? v.toFixed(1).replace('.', ',') : Math.round(v).toLocaleString('de-CH')} ${f.unit}`;
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
+/** Geistis «Fakt des Tages» (jeden Tag ein anderer) */
+export function factOfDay(day: string): { icon: string; text: string } {
+  const r = rng(`fact:${day}`);
+  const f = pick(r, FACTS);
+  const [name, value] = pick(r, f.items);
+  return { icon: f.icon, text: `${cap(name)}: ${fmtFact(value, f)}` };
+}
+
 /** Schätzfrage (4 Antworten) oder Vergleich (2 Antworten) aus dem Schweiz-Wissen */
 function factQuestion(r: () => number, compare: boolean): ChallengeDef {
   const f = pick(r, FACTS);

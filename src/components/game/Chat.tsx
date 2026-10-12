@@ -4,6 +4,8 @@ import type { ChatMessage, Derived } from '../../game/derive';
 import { formatTimeOfDay } from '../../game/rules';
 import type { Team } from '../../game/types';
 import { load, save } from '../../lib/storage';
+import { bump } from '../../lib/stats';
+import { Ghost } from '../Art';
 import { Avatar } from './common';
 
 const QUICK = ['👍', '🚆 Bin im Zug', '📍 Bin dort', '👀 Spur gefunden', '⏳ Gleich da', '🆘 Hilfe!'];
@@ -38,6 +40,7 @@ export function ChatPanel({ client, snap, d, team, title = 'Team-Chat' }: { clie
     const v = t.trim().slice(0, 200);
     if (!v) return;
     client.addAction({ kind: 'chat', text: v });
+    bump('chats');
     setText('');
   };
   useEffect(() => {
@@ -48,7 +51,12 @@ export function ChatPanel({ client, snap, d, team, title = 'Team-Chat' }: { clie
     <section className="chat">
       <h3 className="section-title">{title}</h3>
       <ul className="chat-list" ref={list}>
-        {msgs.length === 0 && <li className="chat-empty">Noch keine Nachrichten. Sagt Hallo! 👋</li>}
+        {msgs.length === 0 && (
+          <li className="chat-empty">
+            <Ghost size={54} wave shadow={false} />
+            <span>Noch keine Nachrichten. Sagt Hallo! 👋</span>
+          </li>
+        )}
         {msgs.map((m) => {
           const p = snap.players[m.by];
           const mine = m.by === snap.me.id;

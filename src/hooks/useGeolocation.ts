@@ -57,7 +57,7 @@ export function useGeolocation() {
     const bg = bgRef.current;
     const id = await g.addWatcher(
       {
-        backgroundTitle: 'Spurlos läuft',
+        backgroundTitle: 'Zeitgeist läuft',
         backgroundMessage: bg ? 'Dein Standort geht verschlüsselt an deine Mitspieler.' : undefined,
         requestPermissions: true,
         stale: false,

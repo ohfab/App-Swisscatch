@@ -40,7 +40,7 @@ export async function requestNotify(): Promise<NotifyPermission> {
 }
 
 /** Benachrichtigung zeigen – nur wenn die App gerade nicht sichtbar ist */
-export async function notifyUser(title: string, body: string, tag = 'spurlos') {
+export async function notifyUser(title: string, body: string, tag = 'zeitgeist') {
   if (document.visibilityState === 'visible') return;
   try {
     if (isNative) {

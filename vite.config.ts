@@ -22,8 +22,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'Spurlos – Versteckspiel und Schweizerkarte',
-        short_name: 'Spurlos',
+        name: 'Zeitgeist – Versteckspiel und Schweizerkarte',
+        short_name: 'Zeitgeist',
         description: 'Das grosse Versteckspiel quer durch die Schweiz – mit Karte und ÖV-Fahrplan.',
         lang: 'de-CH',
         theme_color: '#1F1C35',

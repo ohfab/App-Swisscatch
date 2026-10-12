@@ -5,8 +5,9 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * VITE_NATIVE=1 npm run build → npx cap add android → scripts/android-prepare.mjs → Gradle.
  */
 const config: CapacitorConfig = {
+  // Kennung bleibt vom alten Namen, damit sich neue Versionen über die alte App installieren lassen
   appId: 'ch.spurlos.app',
-  appName: 'Spurlos',
+  appName: 'Zeitgeist',
   webDir: 'dist',
   android: {
     // Verhindert, dass Standort-Updates nach 5 Min im Hintergrund stoppen (Plugin-Empfehlung)
@@ -16,7 +17,7 @@ const config: CapacitorConfig = {
   },
   plugins: {
     LocalNotifications: {
-      smallIcon: 'ic_stat_spurlos',
+      smallIcon: 'ic_stat_zeitgeist',
       iconColor: '#F9B07E',
     },
   },

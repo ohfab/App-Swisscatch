@@ -20,6 +20,11 @@ import { buzz, play } from './lib/sound';
 import { notifyUser } from './lib/notify';
 import { isNative } from './lib/native';
 import { Onboarding } from './components/Onboarding';
+import { Tour } from './components/Tour';
+import { Ghost } from './components/Art';
+import { BadgePopup } from './components/Geisti';
+import { ProfileSheet } from './components/ProfileSheet';
+import { levelOf, markTour, recordRound, setPins, useStats, visitCanton, xpOf } from './lib/stats';
 import { load, save } from './lib/storage';
 import type { Area } from './game/derive';
 import { useInstallPrompt } from './hooks/useInstallPrompt';
@@ -28,7 +33,7 @@ import type { GamePlayerMarker } from './components/MapView';
 import { Toast } from './components/Toast';
 import { CloseIcon, DownloadIcon, FlagIcon, LayersIcon, LocateFilledIcon, LocateIcon, TrainIcon } from './components/Icons';
 import { BASEMAPS, DEFAULT_BASEMAP, type BasemapId, type OverlayId } from './lib/config';
-import { loadCantons, type CantonFeature } from './lib/cantons';
+import { findCanton, loadCantons, type CantonFeature } from './lib/cantons';
 import { distanceMeters, formatDistance, type LatLng } from './lib/geo';
 import type { SearchResult } from './lib/geoadmin';
 import type { Station } from './lib/transport';
@@ -45,7 +50,8 @@ type Panel =
   | { type: 'route' }
   | { type: 'pins' }
   | { type: 'game' }
-  | { type: 'app' };
+  | { type: 'app' }
+  | { type: 'profile' };
 
 const DEFAULT_OVERLAYS: Record<OverlayId, boolean> = { cantons: true, transit: false, hiking: false };
 
@@ -96,8 +102,11 @@ export function App() {
   const online = useOnline();
   const game = useGame(geo.position);
   const [inviteCode] = useState(() => takeInviteCode() ?? '');
-  // Einführung beim ersten Start (nicht, wenn jemand über einen Einladungs- oder Download-Link kommt)
-  const [onboarding, setOnboarding] = useState(() => !load<boolean>('onboarded.v1', false) && !inviteCode && !new URL(location.href).searchParams.has('app'));
+  // Einführung mit Geisti beim ersten Start (nicht, wenn jemand über einen Einladungs- oder Download-Link kommt)
+  const [onboarding, setOnboarding] = useState(() => !load<boolean>('intro.v2', false) && !inviteCode && !new URL(location.href).searchParams.has('app'));
+  const [tour, setTour] = useState(false);
+  const stats = useStats();
+  const level = levelOf(xpOf(stats)).n;
   const gameMeta = game.snapshot?.meta ?? null;
   // Spieluhr: eigene Uhr plus Versatz zur Uhr des Hosts (alle Geräte gleichzeitig)
   const clockOffset = game.snapshot?.clockOffset ?? 0;
@@ -129,7 +138,7 @@ export function App() {
     setToast(notice.text);
     if (notice.sound) play(notice.sound);
     // App im Hintergrund: wichtige Meldungen als Systembenachrichtigung
-    if (notice.sound && notice.sound !== 'tick') void notifyUser('Spurlos', notice.text);
+    if (notice.sound && notice.sound !== 'tick') void notifyUser('Zeitgeist', notice.text);
   }, [notice]);
 
   const cantonList = useCantonProps();
@@ -165,6 +174,22 @@ export function App() {
       const won = gameDerived.result.winner === myGameTeam;
       play(won ? 'win' : 'lose');
       void notifyUser(won ? '🏆 Gewonnen!' : 'Runde vorbei', won ? 'Dein Team hat die Runde gewonnen.' : 'Das andere Team hat gewonnen. Revanche?');
+      // Für Profil und Abzeichen: eigene Aktionen dieser Runde zählen
+      const snap = game.snapshot;
+      if (snap && gameMeta) {
+        const mine = (snap.players[snap.me.id]?.actions ?? []).filter((a) => a.round === gameMeta.round);
+        const n = (kind: string) => mine.filter((a) => a.kind === kind).length;
+        recordRound({
+          key: `${snap.code}:${gameMeta.round}`,
+          won,
+          team: myGameTeam,
+          powerups: n('powerup'),
+          traps: n('trap'),
+          challenges: n('challenge'),
+          finds: won && myGameTeam === 'seeker' && n('found') > 0 ? 1 : 0,
+          at: Date.now(),
+        });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stageNow]);
@@ -173,7 +198,7 @@ export function App() {
       setToast(`🎯 Neue Challenge #${challengeNo}!`);
       play('challenge');
       buzz(200);
-      void notifyUser(`🎯 Neue Challenge #${challengeNo}`, gameDerived?.current?.def?.prompt ?? 'Öffne Spurlos, um sie zu lösen.', 'challenge');
+      void notifyUser(`🎯 Neue Challenge #${challengeNo}`, gameDerived?.current?.def?.prompt ?? 'Öffne Zeitgeist, um sie zu lösen.', 'challenge');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [challengeNo]);
@@ -269,6 +294,28 @@ export function App() {
     setOpenStationId(null);
   }, []);
 
+  const startTour = useCallback(() => {
+    setPanel(null);
+    setStations([]);
+    setOpenStationId(null);
+    // Erst nach dem Schliessen messen, damit die Tour die richtigen Stellen zeigt
+    afterPaint(() => setTour(true));
+  }, []);
+
+  // Fortschritt fürs Profil: gespeicherte Orte und besuchte Kantone
+  useEffect(() => setPins(pins.length), [pins.length]);
+  const lastCantonCheck = useRef<{ lat: number; lng: number; t: number } | null>(null);
+  useEffect(() => {
+    const p = geo.position;
+    if (!p || p.accuracy > 1500) return;
+    const last = lastCantonCheck.current;
+    if (last && Date.now() - last.t < 60_000 && distanceMeters(last, p) < 500) return;
+    lastCantonCheck.current = { lat: p.lat, lng: p.lng, t: Date.now() };
+    void findCanton(p)
+      .then((c) => c && visitCanton(c.properties.abbr))
+      .catch(() => undefined);
+  }, [geo.position]);
+
   const openPlace = useCallback((place: Omit<Place, 'key'>) => {
     setPanel({ type: 'place', place: { ...place, key: placeKey() } });
     setStations([]);
@@ -348,8 +395,9 @@ export function App() {
   backRef.current = () => {
     if (onboarding) {
       setOnboarding(false);
-      save('onboarded.v1', true);
-    } else if (spotPick) {
+      save('intro.v2', true);
+    } else if (tour) setTour(false);
+    else if (spotPick) {
       setSpotPick(null);
       setPanel({ type: 'game' });
     } else if (panel) closePanel();
@@ -472,8 +520,18 @@ export function App() {
       />
 
       <header className="topbar">
-        <SearchBar onSelect={handleSearch} onFocus={() => panel?.type !== 'place' && closePanel()} />
-        {!online && <div className="banner">Offline – bereits geladene Karten bleiben sichtbar</div>}
+        <SearchBar
+          onSelect={handleSearch}
+          onFocus={() => panel?.type !== 'place' && closePanel()}
+          onProfile={() => (panel?.type === 'profile' ? closePanel() : setPanel({ type: 'profile' }))}
+          level={level}
+        />
+        {!online && (
+          <div className="banner offline-banner">
+            <Ghost size={30} mood="sad" shadow={false} />
+            Offline – bereits geladene Karten bleiben sichtbar
+          </div>
+        )}
         {gameMeta && game.snapshot && gameDerived && panel?.type !== 'game' && (
           <button className={`game-chip ${myGameTeam ?? ''} ${gameDerived.stage}`} onClick={() => setPanel({ type: 'game' })}>
             <FlagIcon size={18} />
@@ -547,6 +605,7 @@ export function App() {
         )}
         <button
           className={`fab ${panel?.type === 'layers' ? 'active' : ''}`}
+          data-tour="layers"
           aria-label="Karte und Ebenen"
           title="Karte und Ebenen"
           onClick={() => (panel?.type === 'layers' ? closePanel() : setPanel({ type: 'layers' }))}
@@ -555,6 +614,7 @@ export function App() {
         </button>
         <button
           className={`fab locate ${geo.status} ${follow ? 'following' : ''}`}
+          data-tour="locate"
           aria-label={locateLabel}
           title={locateLabel}
           onClick={onLocate}
@@ -613,6 +673,19 @@ export function App() {
         </>
       )}
       {panel?.type === 'app' && <AppSheet onClose={closePanel} onToast={setToast} />}
+      {panel?.type === 'profile' && (
+        <ProfileSheet
+          name={game.profile.name}
+          onName={game.setName}
+          onClose={closePanel}
+          onTour={startTour}
+          onIntro={() => {
+            closePanel();
+            setOnboarding(true);
+          }}
+          onOpenApp={() => setPanel({ type: 'app' })}
+        />
+      )}
       {panel?.type === 'place' && (
         <PlaceSheet
           key={panel.place.key}
@@ -734,13 +807,27 @@ export function App() {
 
       <TabBar active={activeTab} pinCount={pins.length} onSelect={selectTab} />
       <Toast message={toast} onDone={() => setToast(null)} />
+      <BadgePopup onOpen={() => setPanel({ type: 'profile' })} />
       {onboarding && (
         <Onboarding
-          onDone={() => {
+          initialName={game.profile.name}
+          onName={game.setName}
+          onDone={({ tour: wantsTour, goal }) => {
             setOnboarding(false);
-            save('onboarded.v1', true);
+            save('intro.v2', true);
+            if (wantsTour) startTour();
+            else if (goal === 'game') setPanel({ type: 'game' });
+            else if (goal === 'route') setPanel({ type: 'route' });
           }}
           onOpenApp={() => setPanel({ type: 'app' })}
+        />
+      )}
+      {tour && (
+        <Tour
+          onDone={(completed) => {
+            setTour(false);
+            if (completed) markTour();
+          }}
         />
       )}
     </div>

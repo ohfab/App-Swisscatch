@@ -10,6 +10,7 @@ import type { Position } from '../../hooks/useGeolocation';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { useInstallPrompt } from '../../hooks/useInstallPrompt';
 import { distanceMeters, formatDistance, formatNumber } from '../../lib/geo';
+import { GeistiTip } from '../Geisti';
 import { Avatar, ConfirmButton, Feed, GpsBadge, GpsHint, PhotoButton, Points, Tabs, TEAM_ICON, TEAM_LABEL } from './common';
 
 const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
@@ -201,6 +202,16 @@ export function SeekerView(props: ViewProps) {
         </div>
         <Points value={d.seekerPoints} />
       </div>
+
+      {d.stage === 'hiding' ? (
+        <GeistiTip id="seeker-wait" mood="sleep">
+          Die Verstecker suchen sich gerade ein Versteck. Löst in der Zwischenzeit das Rätsel – das gibt Punkte für Power-ups!
+        </GeistiTip>
+      ) : (
+        <GeistiTip id="seeker-hunt" mood="think" magnifier>
+          Jetzt gilt’s! Jedes Power-up graut auf der Karte Gebiete aus, wo das Versteck nicht sein kann. Seid ihr dort, meldet ihr «Gefunden!».
+        </GeistiTip>
+      )}
 
       {d.frozenUntil && <div className="info-banner bad freeze-banner">🛑 Stopp! Bis {formatTimeOfDay(d.frozenUntil)} stehen bleiben – kein Zug, kein Laufen.</div>}
 
@@ -519,6 +530,16 @@ export function HiderView(props: ViewProps) {
         </div>
         <Points value={d.hiderPoints} />
       </div>
+
+      {d.stage === 'hiding' ? (
+        <GeistiTip id="hider-hide" mood="hide">
+          Pssst! Such dir ein Versteck und logg es ein, bevor die Zeit abläuft. Den Fängern verrate ich nur, was sie mit Power-ups kaufen.
+        </GeistiTip>
+      ) : (
+        <GeistiTip id="hider-traps" mood="wink">
+          Die Fänger sind unterwegs! Löst die Challenges, sonst bekommen sie Gratis-Hinweise. Mit euren Punkten stellt ihr Fallen.
+        </GeistiTip>
+      )}
 
       <SpotCard {...props} />
 

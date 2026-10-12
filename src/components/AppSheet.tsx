@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BottomSheet } from './BottomSheet';
-import { Blob } from './Art';
+import { Ghost } from './Art';
 import { CheckIcon, CopyIcon, DownloadIcon, ShareIcon } from './Icons';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { APK_URL, isNative, PUBLIC_URL } from '../lib/native';
@@ -17,7 +17,7 @@ function Steps({ children }: { children: ReactNode }) {
   return <ol className="how-to install-steps">{children}</ol>;
 }
 
-/** QR-Code als SVG, mit Blobi in der Mitte (Fehlerkorrektur H verträgt das) */
+/** QR-Code als SVG, mit dem Logo in der Mitte (Fehlerkorrektur H verträgt das) */
 function QrCode({ text }: { text: string }) {
   const [qr, setQr] = useState<{ d: string; n: number } | null>(null);
   useEffect(() => {
@@ -78,7 +78,7 @@ export function AppSheet({ onClose, onToast }: Props) {
   const version = `${__APP_VERSION__.sha} · ${new Date(__APP_VERSION__.time).toLocaleString('de-CH', { dateStyle: 'medium', timeStyle: 'short' })}`;
 
   const share = async () => {
-    const data = { title: 'Spurlos', text: 'Hol dir Spurlos – das Versteckspiel quer durch die Schweiz, mit Karte und Fahrplan:', url: DOWNLOAD_URL };
+    const data = { title: 'Zeitgeist', text: 'Hol dir Zeitgeist – das Versteckspiel quer durch die Schweiz, mit Karte und Fahrplan:', url: DOWNLOAD_URL };
     if (navigator.share) {
       try {
         await navigator.share(data);
@@ -129,7 +129,7 @@ export function AppSheet({ onClose, onToast }: Props) {
         <CheckIcon size={22} />
         <div>
           <strong>Läuft schon als App</strong>
-          <small>Du findest Spurlos auf dem Home-Bildschirm bzw. im Startmenü.</small>
+          <small>Du findest Zeitgeist auf dem Home-Bildschirm bzw. im Startmenü.</small>
         </div>
       </div>
     );
@@ -210,11 +210,11 @@ export function AppSheet({ onClose, onToast }: Props) {
       <div className="app-hero">
         <img className="app-icon" src={`${import.meta.env.BASE_URL}icons/icon.svg`} alt="" width={76} height={76} />
         <div>
-          <h3>Spurlos</h3>
+          <h3>Zeitgeist</h3>
           <p>Versteckspiel, Karte und Fahrplan – direkt als App, ohne App Store.</p>
           <small>Gratis · keine Anmeldung · offline nutzbar</small>
         </div>
-        <Blob size={58} color="white" className="app-hero-blob" />
+        <Ghost size={62} wave className="app-hero-blob" shadow={false} />
       </div>
 
       <h3 className="section-title">{installed ? 'Installiert' : canPrompt ? 'Ein Klick genügt' : 'So installierst du die App'}</h3>

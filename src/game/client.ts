@@ -187,7 +187,7 @@ export class GameClient {
       v: 2,
       rev: 0,
       round: 1,
-      name: this.create?.name || 'Spurlos',
+      name: this.create?.name || 'Zeitgeist',
       hostId: this.mine.id,
       phase: 'lobby',
       settings: this.create!.settings,

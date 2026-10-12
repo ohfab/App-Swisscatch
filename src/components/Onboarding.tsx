@@ -1,125 +1,215 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { Blob, Drips } from './Art';
-import { MapIcon, PinIcon, TrainIcon } from './Icons';
+import { useEffect, useMemo, useState } from 'react';
+import { Drips } from './Art';
+import { GeistiSays } from './Geisti';
+import type { GhostMood } from './Art';
 import { isNative } from '../lib/native';
+import { notifyPermission, requestNotify } from '../lib/notify';
+import { useInstallPrompt } from '../hooks/useInstallPrompt';
+import { play } from '../lib/sound';
 
-interface Slide {
-  art: ReactNode;
-  title: ReactNode;
-  text: string;
+export type Goal = 'game' | 'explore' | 'route';
+
+interface Props {
+  initialName: string;
+  onName: (name: string) => void;
+  /** tour: Tour durch die App starten; goal: was die Person zuerst machen will */
+  onDone: (result: { tour: boolean; goal: Goal | null }) => void;
+  onOpenApp: () => void;
 }
 
-const ALL_SLIDES: Slide[] = [
-  {
-    art: <Blob size={170} color="ink" />,
-    title: (
-      <>
-        <strong>Hoi!</strong> Ich bin Blobi.
-      </>
-    ),
-    text: 'Willkommen bei Spurlos – dem Versteckspiel quer durch die Schweiz, mit Karte und ÖV-Fahrplan.',
-  },
-  {
-    art: (
-      <div className="ob-icons">
-        <span>
-          <MapIcon size={34} />
-        </span>
-        <span>
-          <TrainIcon size={34} />
-        </span>
-        <span>
-          <PinIcon size={34} />
-        </span>
-      </div>
-    ),
-    title: (
-      <>
-        <strong>Karte</strong> und Fahrplan
-      </>
-    ),
-    text: 'Such Orte, drück lange auf die Karte für Höhe, Kanton und Abfahrten, und finde ÖV-Verbindungen in der ganzen Schweiz.',
-  },
-  {
-    art: (
-      <div className="ob-duo">
-        <Blob size={130} color="peach" hiding />
-        <Blob size={140} color="ink" magnifier />
-      </div>
-    ),
-    title: (
-      <>
-        <strong>Verstecken</strong> oder suchen
-      </>
-    ),
-    text: 'Die Hälfte versteckt sich, die anderen suchen – mit Power-ups, Fallen, Challenges und Team-Chat.',
-  },
-  {
-    art: <img className="ob-app-icon" src={`${import.meta.env.BASE_URL}icons/icon.svg`} alt="" width={150} height={150} />,
-    title: (
-      <>
-        <strong>Hol dir</strong> die App
-      </>
-    ),
-    text: 'Installiere Spurlos auf PC oder Handy – gratis und ohne App Store. Spielt sich am besten auf dem Handy.',
-  },
+type Step = 'hello' | 'name' | 'goal' | 'reply' | 'notify' | 'app' | 'ready';
+
+const GOALS: { id: Goal; icon: string; label: string; text: string }[] = [
+  { id: 'game', icon: '🕵️', label: 'Versteckspiel mit Freunden', text: 'Quer durch die Schweiz verstecken und suchen' },
+  { id: 'explore', icon: '🗺️', label: 'Die Schweiz erkunden', text: 'Berge, Seen, Kantone und Gemeinden' },
+  { id: 'route', icon: '🚆', label: 'ÖV-Verbindungen finden', text: 'Fahrplan, Gleise und Abfahrten' },
 ];
 
-// In der Android-App ist die App schon da – die Seite «Hol dir die App» entfällt
-const SLIDES = isNative ? ALL_SLIDES.slice(0, -1) : ALL_SLIDES;
+const REPLY: Record<Goal, { mood: GhostMood; text: string }> = {
+  game: {
+    mood: 'cool',
+    text: 'Hammer! Die eine Hälfte versteckt sich irgendwo in der Schweiz, die andere jagt sie mit Zug, Bus und Power-ups. Ich bin der Schiedsrichter – und ich verrate nichts. 🤫',
+  },
+  explore: {
+    mood: 'love',
+    text: 'Oh, ich liebe die Schweiz! Drück irgendwo lange auf die Karte, dann zeige ich dir Höhe, Kanton und die nächsten Abfahrten.',
+  },
+  route: {
+    mood: 'happy',
+    text: 'Ich kenne jeden Fahrplan der Schweiz. Von A nach B mit Gleis, Umstiegen und Verspätungen – in Sekunden.',
+  },
+};
 
-export function Onboarding({ onDone, onOpenApp }: { onDone: () => void; onOpenApp: () => void }) {
+export function Onboarding({ initialName, onName, onDone, onOpenApp }: Props) {
+  const { installed } = useInstallPrompt();
+  const [perm, setPerm] = useState<string>('unsupported');
+  const [name, setName] = useState(initialName);
+  const [goal, setGoal] = useState<Goal | null>(null);
+  const [typed, setTyped] = useState(false);
   const [i, setI] = useState(0);
-  const start = useRef<number | null>(null);
-  const last = i === SLIDES.length - 1;
-  const next = () => (last ? onDone() : setI(i + 1));
-  const slide = SLIDES[i]!;
+
+  useEffect(() => {
+    void notifyPermission().then(setPerm);
+  }, []);
+
+  const steps = useMemo<Step[]>(
+    () => [
+      'hello',
+      'name',
+      'goal',
+      'reply',
+      ...(perm === 'default' ? (['notify'] as Step[]) : []),
+      ...(!installed && !isNative ? (['app'] as Step[]) : []),
+      'ready',
+    ],
+    [perm, installed],
+  );
+  const at = Math.min(i, steps.length - 1);
+  const step = steps[at]!;
+  const next = () => {
+    play('tick');
+    setTyped(false);
+    setI((v) => Math.min(v + 1, steps.length - 1));
+  };
+  const first = name.trim().split(/\s+/)[0] ?? '';
+  const finish = (tour: boolean) => {
+    if (name.trim().length >= 2 && name.trim() !== initialName) onName(name.trim());
+    onDone({ tour, goal });
+  };
+
+  let say: { text: string; mood: GhostMood; wave?: boolean; party?: boolean };
+  switch (step) {
+    case 'hello':
+      say = { text: 'Hoi! Ich bin Geisti, der Geist von Zeitgeist. 👻 Ich begleite dich durch die Schweiz – und durchs Spiel.', mood: 'happy', wave: true };
+      break;
+    case 'name':
+      say = { text: 'Wie heisst du? Dann wissen deine Freunde im Spiel, wer da so herumgeistert.', mood: 'think' };
+      break;
+    case 'goal':
+      say = { text: first ? `Schön, dich kennenzulernen, ${first}! Worauf hast du am meisten Lust?` : 'Schön, dich kennenzulernen! Worauf hast du am meisten Lust?', mood: 'wink' };
+      break;
+    case 'reply':
+      say = REPLY[goal ?? 'game'];
+      break;
+    case 'notify':
+      say = { text: 'Darf ich dir Bescheid geben, wenn im Spiel etwas passiert? Zum Beispiel bei einer neuen Challenge oder einer Falle. Versprochen: kein Spam!', mood: 'surprised' };
+      break;
+    case 'app':
+      say = { text: 'Hol mich auf deinen Home-Bildschirm! Dann bin ich mit einem Tipp da – gratis und ohne App Store.', mood: 'love' };
+      break;
+    default:
+      say = { text: 'Alles bereit! Soll ich dir kurz zeigen, wo was ist? Dauert nur eine halbe Minute.', mood: 'cheer', party: true };
+  }
 
   return (
-    <div
-      className="onboarding"
-      role="dialog"
-      aria-label="Einführung"
-      onPointerDown={(e) => (start.current = e.clientX)}
-      onPointerUp={(e) => {
-        if (start.current === null) return;
-        const dx = e.clientX - start.current;
-        start.current = null;
-        if (dx < -50) next();
-        else if (dx > 50 && i > 0) setI(i - 1);
-      }}
-    >
+    <div className="onboarding" role="dialog" aria-label="Einführung mit Geisti">
       <div className="ob-drips" aria-hidden="true">
         <Drips />
       </div>
-      <button className="ob-skip" onClick={onDone}>
-        Überspringen
-      </button>
-      <div className="ob-slide" key={i}>
-        <div className="ob-art">{slide.art}</div>
-        <h2 className="ob-title">{slide.title}</h2>
-        <p className="ob-text">{slide.text}</p>
-        {last && !isNative && (
-          <button
-            className="wide-btn secondary ob-app-btn"
-            onClick={() => {
-              onDone();
-              onOpenApp();
-            }}
-          >
-            📲 App herunterladen
+      <div className="ob-top">
+        <div className="ob-progress" role="progressbar" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={at + 1}>
+          <span style={{ width: `${((at + 1) / steps.length) * 100}%` }} />
+        </div>
+        <button className="ob-skip" onClick={() => finish(false)}>
+          Überspringen
+        </button>
+      </div>
+
+      <div className="ob-stage" key={step}>
+        <GeistiSays text={say.text} mood={say.mood} wave={say.wave} party={say.party} size={150} onTypedChange={setTyped} />
+      </div>
+
+      <div className={`ob-actions ${typed ? 'ready' : ''}`}>
+        {step === 'hello' && (
+          <button className="wide-btn start" onClick={next}>
+            Hoi Geisti! 👋
           </button>
         )}
-      </div>
-      <div className="ob-footer">
-        <div className="ob-dots" aria-label={`Seite ${i + 1} von ${SLIDES.length}`}>
-          {SLIDES.map((_, k) => (
-            <button key={k} className={k === i ? 'active' : ''} aria-label={`Seite ${k + 1}`} onClick={() => setI(k)} />
-          ))}
-        </div>
-        <button className="ob-next" onClick={next}>
-          {last ? 'Los!' : 'Weiter'}
-        </button>
+        {step === 'name' && (
+          <form
+            className="ob-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (name.trim().length >= 2) next();
+            }}
+          >
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={20} placeholder="Dein Name" aria-label="Dein Name" autoComplete="given-name" />
+            <button className="wide-btn start" disabled={name.trim().length < 2}>
+              Weiter
+            </button>
+            <button type="button" className="link inline ob-later" onClick={next}>
+              Später
+            </button>
+          </form>
+        )}
+        {step === 'goal' && (
+          <div className="ob-choices">
+            {GOALS.map((g) => (
+              <button
+                key={g.id}
+                className={`ob-choice ${goal === g.id ? 'chosen' : ''}`}
+                onClick={() => {
+                  setGoal(g.id);
+                  play('pick');
+                  window.setTimeout(next, 260);
+                }}
+              >
+                <span className="ob-choice-icon">{g.icon}</span>
+                <span className="ob-choice-text">
+                  <strong>{g.label}</strong>
+                  <small>{g.text}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        {step === 'reply' && (
+          <button className="wide-btn start" onClick={next}>
+            Cool, weiter
+          </button>
+        )}
+        {step === 'notify' && (
+          <>
+            <button
+              className="wide-btn start"
+              onClick={async () => {
+                setPerm(await requestNotify());
+                next();
+              }}
+            >
+              🔔 Ja, gerne
+            </button>
+            <button className="link inline ob-later" onClick={next}>
+              Später
+            </button>
+          </>
+        )}
+        {step === 'app' && (
+          <>
+            <button
+              className="wide-btn start"
+              onClick={() => {
+                finish(false);
+                onOpenApp();
+              }}
+            >
+              📲 App herunterladen
+            </button>
+            <button className="link inline ob-later" onClick={next}>
+              Später
+            </button>
+          </>
+        )}
+        {step === 'ready' && (
+          <>
+            <button className="wide-btn start" onClick={() => finish(true)}>
+              Zeig’s mir!
+            </button>
+            <button className="link inline ob-later" onClick={() => finish(false)}>
+              Nein danke, los geht’s
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

@@ -197,69 +197,182 @@ select:focus-visible {
   }
 }
 
-.blob {
+.ghost {
   display: block;
   overflow: visible;
 }
 
-.blob-ink .blob-fill {
-  fill: var(--ink);
-}
-
-.blob-peach .blob-fill {
-  fill: var(--peach);
-}
-
-.blob-white .blob-fill {
+.ghost-fill {
   fill: #fff;
-}
-
-.blob-fill {
   stroke: var(--ink);
   stroke-width: 3;
   stroke-linejoin: round;
 }
 
-.blob-cheek {
+.ghost-peach .ghost-fill {
+  fill: var(--peach);
+}
+
+.ghost-cheek {
   fill: var(--peach-strong);
-  opacity: 0.85;
+  opacity: 0.75;
 }
 
-.blob-peach .blob-cheek {
+.ghost-peach .ghost-cheek {
   fill: #fff;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
-.blob-body {
-  transform-origin: 60px 110px;
-  animation: blob-bob 3.2s ease-in-out infinite;
+.ghost-tongue {
+  fill: var(--peach-strong);
 }
 
-.blob-eyes {
-  transform-origin: 60px 52px;
-  animation: blob-blink 4.6s infinite;
+.ghost-shadow {
+  fill: rgba(31, 28, 53, 0.2);
+  transform-origin: 60px 114px;
+  animation: ghost-shadow 3.4s ease-in-out infinite;
 }
 
-.blob-pupils {
-  animation: blob-look 6s ease-in-out infinite;
+.ghost-float {
+  transform-origin: 60px 70px;
+  animation: ghost-float 3.4s ease-in-out infinite;
 }
 
-.blob-magnifier {
-  transform-origin: 104px 104px;
-  animation: blob-search 2.4s ease-in-out infinite;
+.ghost-eyes {
+  transform-origin: 60px 54px;
+  animation: ghost-blink 4.8s infinite;
 }
 
-@keyframes blob-bob {
+.ghost-look {
+  animation: ghost-look 7s ease-in-out infinite;
+}
+
+.ghost-look-up {
+  transform: translate(2px, -3px);
+}
+
+.ghost-wave {
+  transform-origin: 94px 58px;
+  animation: ghost-wave 1.1s ease-in-out infinite;
+}
+
+.ghost-magnifier {
+  transform-origin: 104px 102px;
+  animation: ghost-search 2.4s ease-in-out infinite;
+}
+
+.ghost-hat {
+  transform-origin: 60px 20px;
+  animation: ghost-hat 1.6s ease-in-out infinite;
+}
+
+.ghost-talk-b {
+  animation: ghost-talk 0.32s steps(1) infinite;
+}
+
+.ghost-talk-a {
+  animation: ghost-talk 0.32s steps(1) infinite reverse;
+}
+
+.ghost-tear {
+  animation: ghost-tear 2.2s ease-in infinite;
+}
+
+.ghost-zz text {
+  animation: ghost-zz 2.6s ease-in-out infinite;
+}
+
+.ghost-zz text:last-child {
+  animation-delay: 0.6s;
+}
+
+.ghost-hearts {
+  transform-origin: 60px 53px;
+  animation: ghost-pulse 0.9s ease-in-out infinite;
+}
+
+/* Stimmungen: jubeln hüpft, traurig sinkt, verstecken wird durchsichtig */
+.mood-cheer .ghost-float {
+  animation: ghost-hop 0.9s var(--spring) infinite;
+}
+
+.mood-cheer .ghost-shadow {
+  animation: ghost-shadow 0.9s ease-in-out infinite;
+}
+
+.mood-sad .ghost-float {
+  animation-duration: 5s;
+  translate: 0 3px;
+}
+
+.mood-hide .ghost-float {
+  animation:
+    ghost-float 3.4s ease-in-out infinite,
+    ghost-fade 4s ease-in-out infinite;
+}
+
+.mood-surprised .ghost-float {
+  animation: ghost-jump 0.6s var(--spring) 1 both, ghost-float 3.4s 0.6s ease-in-out infinite;
+}
+
+@keyframes ghost-float {
   0%,
   100% {
-    transform: scale(1, 1) translateY(0);
+    transform: translateY(0) rotate(-2.5deg);
   }
   50% {
-    transform: scale(1.04, 0.95) translateY(2px);
+    transform: translateY(-6px) rotate(2.5deg);
   }
 }
 
-@keyframes blob-blink {
+@keyframes ghost-shadow {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.78);
+    opacity: 0.7;
+  }
+}
+
+@keyframes ghost-hop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  15% {
+    transform: translateY(2px) scale(1.06, 0.94);
+  }
+  50% {
+    transform: translateY(-14px) scale(0.97, 1.04) rotate(-3deg);
+  }
+}
+
+@keyframes ghost-jump {
+  0% {
+    transform: translateY(6px) scale(1.08, 0.9);
+  }
+  60% {
+    transform: translateY(-10px) scale(0.96, 1.05);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes ghost-fade {
+  0%,
+  100% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes ghost-blink {
   0%,
   92%,
   100% {
@@ -270,7 +383,7 @@ select:focus-visible {
   }
 }
 
-@keyframes blob-look {
+@keyframes ghost-look {
   0%,
   20%,
   100% {
@@ -278,21 +391,93 @@ select:focus-visible {
   }
   30%,
   45% {
-    transform: translate(-5px, -1px);
+    transform: translate(-3px, -1px);
   }
   55%,
   75% {
-    transform: translate(4px, 2px);
+    transform: translate(3px, 1.5px);
   }
 }
 
-@keyframes blob-search {
+@keyframes ghost-wave {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-28deg);
+  }
+}
+
+@keyframes ghost-search {
   0%,
   100% {
     transform: rotate(0deg) translate(0, 0);
   }
   50% {
     transform: rotate(-14deg) translate(-4px, -3px);
+  }
+}
+
+@keyframes ghost-hat {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}
+
+@keyframes ghost-talk {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes ghost-tear {
+  0% {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+}
+
+@keyframes ghost-zz {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate(3px, -5px);
+    opacity: 1;
+  }
+}
+
+@keyframes ghost-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghost *,
+  .ghost {
+    animation: none !important;
   }
 }
 

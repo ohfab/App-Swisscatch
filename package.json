@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "geodata": "node scripts/build-geodata.mjs",
-    "icons": "node scripts/build-icons.mjs",
+    "icons": "node scripts/build-logo.mjs && node scripts/build-icons.mjs",
     "broker": "node scripts/dev-broker.mjs",
     "android": "rm -rf android && VITE_NATIVE=1 npm run build && cap add android && node scripts/android-prepare.mjs && cap sync android && cd android && ./gradlew assembleRelease"
   },

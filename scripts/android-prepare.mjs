@@ -1,4 +1,4 @@
-// Passt das von «npx cap add android» erzeugte Projekt an Spurlos an:
+// Passt das von «npx cap add android» erzeugte Projekt an Zeitgeist an:
 // App-Symbol, Startbild, Benachrichtigungssymbol, Version und Signatur.
 // Aufruf nach «npx cap add android», vor «npx cap sync android» und Gradle.
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

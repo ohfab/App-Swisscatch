@@ -4,11 +4,15 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:scaleX="0.165" android:scaleY="0.165" android:translateX="11.43" android:translateY="10.11">
-        <path android:fillColor="#FFFFFF" android:fillAlpha="0.28" android:pathData="M103,408a15,15 0 1,0 30,0a15,15 0 1,0 -30,0" />
-        <path android:fillColor="#FFFFFF" android:fillAlpha="0.5" android:pathData="M146,372a18,18 0 1,0 36,0a18,18 0 1,0 -36,0" />
-        <path android:fillColor="#FFFFFF" android:fillAlpha="0.78" android:pathData="M197,350a21,21 0 1,0 42,0a21,21 0 1,0 -42,0" />
-        <path android:fillColor="#FFFFFF" android:fillType="evenOdd" android:pathData="M300,432C300,432 186,306 186,214a114,114 0 0,1 228,0c0,92 -114,218 -114,218Z M254,214a46,46 0 1,0 92,0a46,46 0 1,0 -92,0" />
-        <path android:fillColor="#FFFFFF" android:pathData="M303,198a13,13 0 1,0 26,0a13,13 0 1,0 -26,0" />
+    <group android:rotation="-8" android:pivotX="56" android:pivotY="55">
+        <group android:translateX="32.000" android:translateY="31.000" android:scaleX="0.4" android:scaleY="0.4">
+            <group android:translateX="-34" android:translateY="9">
+                <path android:fillColor="#FFFFFF" android:fillAlpha="0.3" android:pathData="M24 56 C24 32 40 15 60 15 C80 15 96 32 96 56 C96 72 98 84 101 95 A10.25 10.25 0 0 1 80.5 95 A10.25 10.25 0 0 1 60 95 A10.25 10.25 0 0 1 39.5 95 A10.25 10.25 0 0 1 19 95 C22 84 24 72 24 56 Z" />
+            </group>
+            <group android:translateX="-17" android:translateY="4.5">
+                <path android:fillColor="#FFFFFF" android:fillAlpha="0.6" android:pathData="M24 56 C24 32 40 15 60 15 C80 15 96 32 96 56 C96 72 98 84 101 95 A10.25 10.25 0 0 1 80.5 95 A10.25 10.25 0 0 1 60 95 A10.25 10.25 0 0 1 39.5 95 A10.25 10.25 0 0 1 19 95 C22 84 24 72 24 56 Z" />
+            </group>
+            <path android:fillColor="#FFFFFF" android:fillType="evenOdd" android:pathData="M24 56 C24 32 40 15 60 15 C80 15 96 32 96 56 C96 72 98 84 101 95 A10.25 10.25 0 0 1 80.5 95 A10.25 10.25 0 0 1 60 95 A10.25 10.25 0 0 1 39.5 95 A10.25 10.25 0 0 1 19 95 C22 84 24 72 24 56 Z M39.9 53 a7.6 9.8 0 1 0 15.2 0 a7.6 9.8 0 1 0 -15.2 0 Z M64.9 53 a7.6 9.8 0 1 0 15.2 0 a7.6 9.8 0 1 0 -15.2 0 Z" />
+        </group>
     </group>
 </vector>

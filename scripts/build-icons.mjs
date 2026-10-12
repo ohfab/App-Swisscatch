@@ -1,4 +1,4 @@
-// Rendert die SVG-Icons mit Playwright/Chromium zu PNG-Dateien.
+// Rendert die SVG-Icons mit Playwright/Chromium zu PNG-Dateien (Web-App und Android).
 // Aufruf: npm run icons  (benötigt eine lokale Playwright-Installation)
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
@@ -10,6 +10,12 @@ const jobs = [
   { src: 'icon-maskable.svg', out: 'icon-maskable-512.png', size: 512 },
   { src: 'icon-maskable.svg', out: 'apple-touch-icon.png', size: 180 },
 ];
+// Android bis Version 7 nutzt noch PNG-Symbole
+const densities = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
+for (const [d, size] of Object.entries(densities)) {
+  jobs.push({ src: 'icon.svg', out: `../../native/android/res/mipmap-${d}/ic_launcher.png`, size });
+  jobs.push({ src: 'icon-round.svg', out: `../../native/android/res/mipmap-${d}/ic_launcher_round.png`, size });
+}
 
 const browser = await chromium.launch();
 const page = await browser.newPage();

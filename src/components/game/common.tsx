@@ -194,7 +194,7 @@ export function GpsHint({ platform }: { platform: 'ios' | 'android' | 'desktop' 
       {platform === 'ios' && (
         <>
           <strong>Standort ungenau?</strong> Auf dem iPhone: Einstellungen → Datenschutz & Sicherheit → Ortungsdienste → <em>Safari-Websites</em> (bzw.
-          Spurlos) → «Beim Verwenden» und <strong>«Genauer Standort»</strong> einschalten. Kurz ins Freie gehen hilft auch.
+          Zeitgeist) → «Beim Verwenden» und <strong>«Genauer Standort»</strong> einschalten. Kurz ins Freie gehen hilft auch.
         </>
       )}
       {platform === 'android' && (

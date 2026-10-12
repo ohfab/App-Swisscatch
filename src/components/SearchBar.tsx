@@ -15,9 +15,12 @@ const KIND_ICON: Record<SearchKind, typeof MapIcon> = {
 interface Props {
   onSelect: (result: SearchResult) => void;
   onFocus: () => void;
+  /** Tipp aufs Logo: Profil mit Level und Abzeichen */
+  onProfile: () => void;
+  level: number;
 }
 
-export function SearchBar({ onSelect, onFocus }: Props) {
+export function SearchBar({ onSelect, onFocus, onProfile, level }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -91,8 +94,11 @@ export function SearchBar({ onSelect, onFocus }: Props) {
 
   return (
     <div className="search" ref={boxRef}>
-      <div className="search-field">
-        <img className="search-logo" src={`${import.meta.env.BASE_URL}icons/icon.svg`} alt="" width={28} height={28} />
+      <div className="search-field" data-tour="search">
+        <button type="button" className="search-logo" data-tour="profile" onClick={onProfile} aria-label={`Profil öffnen (Level ${level})`}>
+          <img src={`${import.meta.env.BASE_URL}icons/icon.svg`} alt="" width={38} height={38} />
+          <span className="search-level">{level}</span>
+        </button>
         <input
           ref={inputRef}
           type="search"

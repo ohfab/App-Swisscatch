@@ -1,9 +1,9 @@
-# Spurlos – das Versteckspiel quer durch die Schweiz
+# Zeitgeist – das Versteckspiel quer durch die Schweiz
 
 Eine Karten-App für die ganze Schweiz mit einem **schweizweiten Versteckspiel für Freunde**.
 Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC, und als Android-App mit GPS im Hintergrund.
 
-**Live:** https://ohfab.github.io/App-Swisscatch/ · **App herunterladen:** https://ohfab.github.io/App-Swisscatch/download/ · **Android-App:** [Spurlos.apk](https://github.com/ohfab/App-Swisscatch/releases/latest/download/Spurlos.apk)
+**Live:** https://ohfab.github.io/App-Swisscatch/ · **App herunterladen:** https://ohfab.github.io/App-Swisscatch/download/ · **Android-App:** [Zeitgeist.apk](https://github.com/ohfab/App-Swisscatch/releases/latest/download/Zeitgeist.apk)
 
 <p>
   <img src="docs/screenshots/karte.jpg" width="200" alt="Strassenkarte von Bern">
@@ -36,7 +36,22 @@ Sie läuft als installierbare Web-App (PWA) auf dem Handy und am PC, und als And
 - **Pins:** Treffpunkte oder Verstecke speichern, benennen, einfärben, teilen. Sie bleiben auf dem Gerät gespeichert.
 - **Zusatzebenen:** ÖV-Haltestellen und Wanderwege.
 - **App-Gefühl:** Vollbild, Bottom-Sheets, Tab-Leiste, Dunkelmodus, installierbar, offline nutzbar für bereits geladene Kartenteile.
-- **Design «Tinte & Pfirsich»:** klare Konturen, Pillen-Knöpfe, tropfende Kopfzeilen, das Maskottchen Blobi und viele kleine Animationen (springende Tab-Blase, gleitende Tabs, Glücksrad, Versus-Screen).
+- **Design «Tinte & Pfirsich»:** klare Konturen, Pillen-Knöpfe, tropfende Kopfzeilen und viele kleine Animationen (springende Tab-Blase, gleitende Tabs, Glücksrad, Versus-Screen).
+- **Geisti, das Maskottchen:** Der kleine Geist schwebt durch die ganze App, mit zehn Stimmungen von fröhlich bis traurig, Lupe für die Fänger und Partyhut bei Siegen. Mehr dazu unten.
+
+## Geisti und dein Fortschritt
+
+Geisti ist der Geist von Zeitgeist und begleitet dich wie der Vogel bei Duolingo.
+
+- **Einführung:** Beim ersten Start stellt sich Geisti vor, fragt nach deinem Namen und worauf du Lust hast (Spiel, Schweiz erkunden oder Fahrplan), holt die Erlaubnis für Mitteilungen ab und bietet die App zum Installieren an. Er spricht in Sprechblasen, Buchstabe für Buchstabe.
+- **Tour:** Danach zeigt er mit einem Spotlight die wichtigsten Stellen: Suche, Karte, Standort, Ebenen, Fahrplan, Orte, Spiel und Profil. Die Tour lässt sich im Profil jederzeit wiederholen.
+- **Tipps im Spiel:** Je nach Rolle und Phase gibt Geisti einmalig einen kurzen Tipp, etwa «Logg dein Versteck ein» oder «Kauft Power-ups».
+- **Reaktionen:** Er jubelt mit Partyhut, wenn du gewinnst, ist traurig bei einer Niederlage, versteckt sich (halb durchsichtig) bei den Versteckern und sucht mit der Lupe bei den Fängern.
+- **Profil:** Ein Tipp auf das Logo oben links öffnet dein Profil, mit Level (vom «Nebelhauch» bis zum «Zeitgeist»), XP, Statistik, Geistis Fakt des Tages, Abzeichen und der Kantonssammlung.
+- **Abzeichen:** 17 Abzeichen, z.B. «Spürnase» (als Fänger gewinnen), «Phantom» (als Verstecker gewinnen), «Kantönligeist» (in 5 Kantonen unterwegs), «Nachtgespenst» (Runde nach 22 Uhr) oder «Pendler» (10 Verbindungen gesucht). Neue Abzeichen feiert Geisti mit einer Meldung.
+- **Kantone sammeln:** Jeder Kanton, in dem dein Standort an war, kommt in die Sammlung, bis alle 26 voll sind.
+
+Fortschritt und Abzeichen bleiben auf dem Gerät gespeichert.
 
 ## Das Spiel
 
@@ -98,7 +113,6 @@ Die Hälfte der Gruppe versteckt sich irgendwo in der Schweiz, die andere Hälft
 - **Chat:** In der Lobby schreiben alle zusammen, im Spiel nur das eigene Team. Dazu gibt es Schnellantworten wie «🚆 Bin im Zug».
 - **Quiz und Rätsel:** Fragen zu Kantonen sowie Schätz- und Vergleichsfragen zu Bergen, Seen, Pässen, Tunneln und Städten.
 - **Töne und Vibration:** Glücksrad, Countdown, Challenges, Fallen und Sieg haben eigene Töne. Sie lassen sich im Spiel-Menü mit 🔊 ausschalten.
-- **Einführung:** Beim ersten Start erklärt Blobi die App in vier kurzen Seiten.
 - **Benachrichtigungen:** Ist die App im Hintergrund, melden sich neue Challenges, Fallen, Chat-Nachrichten und «Gefunden!» als Systembenachrichtigung. Die Erlaubnis holt die Lobby einmal ab.
 
 **Fair Play:** Die App vertraut den Spielern. Sie zeigt jedem Team nur seine eigenen Informationen. Die Fänger sehen weder das Versteck noch die Standorte der Verstecker. Das Versteck erscheint erst am Ende der Runde.
@@ -121,14 +135,14 @@ Am PC ist der Standort meist ungenau (WLAN-Ortung). Zum Spielen unterwegs eignet
 
 ## Android-App
 
-Web-Apps senden den Standort nur, solange sie offen sind. Die Android-App läuft mit gesperrtem Bildschirm weiter: Während eines Spiels zeigt sie eine dauerhafte Meldung «Spurlos läuft» und schickt den Standort weiter an die Mitspieler. Challenges, Fallen und Chat kommen als Benachrichtigung.
+Web-Apps senden den Standort nur, solange sie offen sind. Die Android-App läuft mit gesperrtem Bildschirm weiter: Während eines Spiels zeigt sie eine dauerhafte Meldung «Zeitgeist läuft» und schickt den Standort weiter an die Mitspieler. Challenges, Fallen und Chat kommen als Benachrichtigung.
 
-- **Download:** [Spurlos.apk](https://github.com/ohfab/App-Swisscatch/releases/latest/download/Spurlos.apk), auch über die Seite «App herunterladen». Beim ersten Mal fragt Android, ob der Browser «unbekannte Apps» installieren darf.
+- **Download:** [Zeitgeist.apk](https://github.com/ohfab/App-Swisscatch/releases/latest/download/Zeitgeist.apk), auch über die Seite «App herunterladen». Der alte Link `Spurlos.apk` liefert dieselbe Datei. Beim ersten Mal fragt Android, ob der Browser «unbekannte Apps» installieren darf.
 - **Updates:** Neue Versionen einfach über die alte installieren, gespeicherte Pins und Einstellungen bleiben.
 - **Build:** `.github/workflows/android.yml` baut die APK bei jedem Push und legt sie im Release `android-latest` ab. Lokal geht es mit `npm run android` (Java 21 und Android SDK nötig, `ANDROID_HOME` gesetzt).
 - **Technik:** [Capacitor](https://capacitorjs.com) verpackt dieselbe Web-App (`VITE_NATIVE=1`, ohne Service Worker). Das Android-Projekt `android/` entsteht bei jedem Build neu; `scripts/android-prepare.mjs` legt Symbol, Startbild und Texte aus `native/android/res` darüber und setzt Version und Signatur. GPS im Hintergrund über `@capacitor-community/background-geolocation`, Benachrichtigungen über `@capacitor/local-notifications`.
 - **Signatur:** Damit Updates sich drüber installieren lassen, braucht jede Version denselben Schlüssel. Er liegt in `native/android/spurlos.jks` (Passwort `spurlos-public`). Das ist für eine Freundes-App bequem, heisst aber: Jeder mit dem Repo könnte eine APK mit derselben Signatur bauen. Wer das nicht will, legt einen eigenen Schlüssel als GitHub-Secret an und gibt ihn dem Workflow über `ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` und `ANDROID_KEY_PASSWORD` mit. Danach muss die App einmal neu installiert werden.
-- **iPhone:** Eine iOS-App bräuchte ein Apple-Entwicklerkonto. Auf dem iPhone läuft Spurlos als Web-App vom Home-Bildschirm.
+- **iPhone:** Eine iOS-App bräuchte ein Apple-Entwicklerkonto. Auf dem iPhone läuft Zeitgeist als Web-App vom Home-Bildschirm.
 
 ## Loslegen
 
@@ -161,7 +175,11 @@ src/
   App.tsx                 Zustand der App, Sheets, Kartensteuerung
   styles/                 Design «Tinte & Pfirsich»: base (Farben, Schrift), map, shell, content, game, show, desktop
   components/
-    Art.tsx               Grafiken: tropfende Kanten und Maskottchen Blobi
+    Art.tsx               Grafiken: tropfende Kanten und Geisti (Stimmungen, Lupe, Partyhut)
+    Geisti.tsx            Geisti spricht: Sprechblase, Tipps im Spiel, Abzeichen-Meldung
+    Onboarding.tsx        Einführung mit Geisti (Name, Ziel, Mitteilungen, App)
+    Tour.tsx              Tour durch die App mit Spotlight
+    ProfileSheet.tsx      Profil: Level, Statistik, Abzeichen, Kantone, Einstellungen
     MapView.tsx           Leaflet-Karte mit MapLibre-Vektorkarte, Kantone, Pins, Route, Standort
     SearchBar.tsx         Ortssuche
     PlaceSheet.tsx        Infos zu einem Punkt, Pins, ÖV

@@ -4,7 +4,7 @@ import { rng } from '../../game/content';
 import type { GameMeta, PlayerState } from '../../game/types';
 import { useNow } from '../../hooks/useNow';
 import { Avatar } from './common';
-import { Blob, Drips } from '../Art';
+import { Drips, Ghost } from '../Art';
 import { buzz, play } from '../../lib/sound';
 
 const SPIN_MS = 2600;
@@ -100,7 +100,7 @@ function Wheel({ ids, players, target, seed, step, sinceStepStart, highlight, id
         })}
       </svg>
       <div className="wheel-hub">
-        <Blob size={58} color="ink" />
+        <Ghost size={58} mood="surprised" shadow={false} />
       </div>
     </div>
   );
@@ -191,14 +191,14 @@ function VersusStage({ meta, players, meId, now }: { meta: GameMeta; players: Pr
     <div className="versus">
       <div className="vs-half hiders">
         <div className="vs-label">
-          <Blob size={66} color="peach" hiding className="vs-mascot" />
+          <Ghost size={66} color="peach" mood="hide" className="vs-mascot" shadow={false} />
           VERSTECKER
         </div>
         {team(draw.hiders, 'hider')}
       </div>
       <div className="vs-half seekers">
         <div className="vs-label">
-          <Blob size={66} color="ink" magnifier className="vs-mascot" />
+          <Ghost size={66} magnifier className="vs-mascot" shadow={false} />
           FÄNGER
         </div>
         {team(seekers, 'seeker')}

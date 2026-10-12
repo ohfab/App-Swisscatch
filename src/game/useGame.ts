@@ -97,7 +97,7 @@ export function useGame(position: Position | null) {
 
   const create = useCallback(
     (gameName: string, settings: Partial<GameSettings> = {}) =>
-      setSession({ code: newCode(), create: { name: gameName.trim() || 'Spurlos', settings: { ...DEFAULT_SETTINGS, ...settings } } }),
+      setSession({ code: newCode(), create: { name: gameName.trim() || 'Zeitgeist', settings: { ...DEFAULT_SETTINGS, ...settings } } }),
     [setSession],
   );
 

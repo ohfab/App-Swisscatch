@@ -22,6 +22,7 @@ export function TabBar({ active, pinCount, onSelect }: Props) {
         <button
           key={id}
           className={`tab ${active === id ? 'active' : ''}`}
+          data-tour={`tab-${id}`}
           aria-current={active === id ? 'page' : undefined}
           onClick={() => onSelect(id)}
         >

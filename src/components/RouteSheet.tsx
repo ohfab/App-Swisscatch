@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { bump } from '../lib/stats';
 import L from 'leaflet';
 import { BottomSheet } from './BottomSheet';
 import { LineBadge } from './LineBadge';
@@ -377,6 +378,7 @@ export function RouteSheet({ plan, onPlan, position, geoStatus, onStartGps, onFi
           }
         }
         if (!append && r.connections.length === 0) setError('Keine Verbindung gefunden.');
+        if (!append && r.connections.length) bump('routes');
         onPlan((p) => {
           if (append && p.result) {
             const known = new Set(p.result.connections.map((c) => c.id));

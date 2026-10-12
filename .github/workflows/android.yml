@@ -1,5 +1,5 @@
 # Baut die Android-App (APK) und legt sie als Release «android-latest» ab.
-# Download immer unter: https://github.com/<owner>/<repo>/releases/latest/download/Spurlos.apk
+# Download immer unter: https://github.com/<owner>/<repo>/releases/latest/download/Zeitgeist.apk
 name: Android-App bauen
 
 on:
@@ -48,13 +48,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp android/app/build/outputs/apk/release/app-release.apk Spurlos.apk
-          notes="Spurlos ${VERSION_NAME} für Android, gebaut aus ${GITHUB_SHA::7}. APK aufs Handy laden, öffnen und «Installieren» tippen (einmalig «Unbekannte Apps» erlauben). Neue Versionen lassen sich einfach drüber installieren."
+          cp android/app/build/outputs/apk/release/app-release.apk Zeitgeist.apk
+          # Kopie unter dem alten Namen, damit frühere Download-Links weiter gehen
+          cp Zeitgeist.apk Spurlos.apk
+          notes="Zeitgeist ${VERSION_NAME} für Android, gebaut aus ${GITHUB_SHA::7}. APK aufs Handy laden, öffnen und «Installieren» tippen (einmalig «Unbekannte Apps» erlauben). Neue Versionen lassen sich einfach drüber installieren."
           if gh release view android-latest >/dev/null 2>&1; then
             git tag -f android-latest "$GITHUB_SHA"
             git push -f origin refs/tags/android-latest
-            gh release upload android-latest Spurlos.apk --clobber
-            gh release edit android-latest --title "Spurlos für Android ${VERSION_NAME}" --notes "$notes" --latest
+            gh release upload android-latest Zeitgeist.apk Spurlos.apk --clobber
+            gh release edit android-latest --title "Zeitgeist für Android ${VERSION_NAME}" --notes "$notes" --latest
           else
-            gh release create android-latest Spurlos.apk --target "$GITHUB_SHA" --title "Spurlos für Android ${VERSION_NAME}" --notes "$notes" --latest
+            gh release create android-latest Zeitgeist.apk Spurlos.apk --target "$GITHUB_SHA" --title "Zeitgeist für Android ${VERSION_NAME}" --notes "$notes" --latest
           fi

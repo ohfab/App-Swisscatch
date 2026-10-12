@@ -8,4 +8,4 @@ export const nativePlatform = Capacitor.getPlatform();
 export const PUBLIC_URL = isNative ? 'https://ohfab.github.io/App-Swisscatch/' : `${location.origin}${import.meta.env.BASE_URL}`;
 
 /** Immer die neueste Android-App (wird bei jedem Push gebaut) */
-export const APK_URL = 'https://github.com/ohfab/App-Swisscatch/releases/latest/download/Spurlos.apk';
+export const APK_URL = 'https://github.com/ohfab/App-Swisscatch/releases/latest/download/Zeitgeist.apk';

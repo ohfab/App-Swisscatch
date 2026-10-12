@@ -17,7 +17,7 @@ import { setSoundOn, soundOn, subscribeSound } from '../lib/sound';
 import { useNotifyPermission } from '../lib/notify';
 import { isNative } from '../lib/native';
 import { HiderView, SeekerView } from './game/TeamViews';
-import { Blob } from './Art';
+import { Ghost } from './Art';
 
 interface Props {
   game: GameApi;
@@ -56,8 +56,8 @@ function StartView({ game, prefillCode }: { game: GameApi; prefillCode: string }
     <>
       <div className="game-hero">
         <div className="game-hero-art" aria-hidden="true">
-          <Blob size={70} color="white" hiding className="hero-hider" />
-          <Blob size={76} color="ink" magnifier className="hero-seeker" />
+          <Ghost size={70} color="peach" mood="hide" className="hero-hider" shadow={false} />
+          <Ghost size={76} magnifier className="hero-seeker" shadow={false} />
         </div>
         <div>
           <h3>Versteck dich – oder such!</h3>
@@ -218,10 +218,10 @@ function LobbyView({ game, snap, d, position, now, onToast }: { game: GameApi; s
   const link = inviteLink(snap.code);
 
   const share = async () => {
-    const text = `Komm zu Spurlos – Runde «${meta.name}»! Code: ${snap.code}`;
+    const text = `Komm zu Zeitgeist – Runde «${meta.name}»! Code: ${snap.code}`;
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Spurlos', text, url: link });
+        await navigator.share({ title: 'Zeitgeist', text, url: link });
         return;
       } catch (err) {
         if ((err as Error).name === 'AbortError') return;
@@ -329,7 +329,9 @@ function ResultView({ game, snap, d, onShowPoint }: { game: GameApi; snap: GameS
   return (
     <>
       <div className={`result ${won ? 'won' : 'lost'}`}>
-        <span className="result-emoji">{won ? '🏆' : r?.winner ? '😮‍💨' : '🏁'}</span>
+        <Ghost size={112} mood={won ? 'cheer' : r?.winner ? 'sad' : 'think'} party={won} className="result-ghost" />
+        {won && <span className="result-cheer">Geisti feiert mit dir! 🎉</span>}
+        {!won && r?.winner && <span className="result-cheer">Nächstes Mal klappt’s – Revanche?</span>}
         <strong>{headline}</strong>
         <small>{sub}</small>
       </div>
@@ -404,7 +406,7 @@ export function GameSheet({ game, d, now, prefillCode, geoStatus, position, onSt
   const inGame = !!game.session;
   const stage = d?.stage;
 
-  const title = meta ? meta.name : inGame ? 'Verbinde …' : 'Spurlos';
+  const title = meta ? meta.name : inGame ? 'Verbinde …' : 'Zeitgeist';
   const subtitle = meta
     ? `${{ lobby: 'Lobby', draw: 'Auslosung', versus: 'Gleich geht’s los', hiding: 'Versteckzeit', seeking: 'Suche läuft', ended: 'Beendet' }[stage ?? 'lobby']} · Code ${snap!.code}`
     : inGame
